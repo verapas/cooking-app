@@ -6,7 +6,7 @@ import { db } from '$lib/server/db';
 import type { RequestHandler } from './$types';
 
 const IMAGES_DIR = resolve(env.IMAGES_DIR ?? './data/images');
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const EXT_BY_TYPE: Record<string, string> = {
   'image/jpeg': '.jpg',

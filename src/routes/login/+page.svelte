@@ -1,26 +1,27 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { setToken } from '$lib/auth.svelte';
 
-  let token = $state('');
+  let username = $state('');
+  let password = $state('');
   let error = $state('');
   let busy = $state(false);
 
   async function submit(e: Event) {
     e.preventDefault();
-    const t = token.trim();
-    if (!t) return;
+    if (!username.trim() || !password.trim()) return;
     busy = true;
     error = '';
     try {
-      const res = await fetch('/api/auth/verify', {
-        headers: { Authorization: 'Bearer ' + t }
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password: password.trim() })
       });
+      const data = await res.json();
       if (res.ok) {
-        setToken(t);
         await goto('/');
       } else {
-        error = 'Token ungültig. Bitte überprüfen.';
+        error = data.error || 'Anmeldung fehlgeschlagen.';
       }
     } catch {
       error = 'Verbindungsfehler.';
@@ -37,20 +38,27 @@
 <main class="container login">
   <h1>🔐 Admin-Login</h1>
   <p class="dim">
-    Gib den API-Token ein, um Bilder hochzuladen. Er bleibt dauerhaft auf
-    diesem Gerät gespeichert (localStorage) – bis du dich abmeldest.
+    Gib Benutzername und Passwort ein, um Bilder hochzuladen. Die Session
+    bleibt 7 Tage gültig.
   </p>
 
   <form onsubmit={submit} class="form">
     <input
-      type="password"
-      bind:value={token}
-      placeholder="API-Token"
-      autocomplete="off"
+      type="text"
+      bind:value={username}
+      placeholder="Benutzername"
+      autocomplete="username"
       required
     />
-    <button class="btn btn-primary" disabled={busy || !token.trim()}>
-      {busy ? 'Prüfe…' : 'Einloggen'}
+    <input
+      type="password"
+      bind:value={password}
+      placeholder="Passwort"
+      autocomplete="current-password"
+      required
+    />
+    <button class="btn btn-primary" disabled={busy || !username.trim() || !password.trim()}>
+      {busy ? 'Anmelden…' : 'Einloggen'}
     </button>
   </form>
 

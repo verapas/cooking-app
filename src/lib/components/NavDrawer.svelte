@@ -2,13 +2,16 @@
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { closeDrawer, nav } from '$lib/nav.svelte';
-  import { auth, logout } from '$lib/auth.svelte';
+  import { auth, logout, refreshAuth } from '$lib/auth.svelte';
   import type { Category } from '$lib/types';
 
   let { categories }: { categories: Category[] } = $props();
 
-  // Nach jeder Navigation den Drawer schließen.
-  afterNavigate(() => closeDrawer());
+  // Nach jeder Navigation den Drawer schließen und Auth-Status prüfen.
+  afterNavigate(() => {
+    closeDrawer();
+    refreshAuth();
+  });
 
   function isCatActive(slug: string): boolean {
     return page.url.pathname === `/category/${slug}`;
@@ -51,8 +54,8 @@
       </a>
 
       <div class="divider"></div>
-      {#if auth.token}
-        <button class="item" onclick={() => { logout(); closeDrawer(); }}>
+      {#if auth.isLoggedIn}
+        <button class="item" onclick={async () => { await logout(); closeDrawer(); }}>
           <span class="ic">🚪</span> Abmelden
         </button>
       {:else}

@@ -1,29 +1,26 @@
-// === Client-seitiger Admin-Auth-Status ===
-// Speichert den API-Token (nach erfolgreicher Verifikation) dauerhaft im
-// localStorage. Damit kann man Bilder hochladen, ohne sich jedes Mal neu
-// einzuloggen. Der Token ist derselbe wie COOKING_API_TOKEN auf dem Server.
-
 import { browser } from '$app/environment';
 
-const KEY = 'cook_admin_token';
+export const auth = $state({ isLoggedIn: false });
 
-export const auth = $state({ token: '' });
-
-// Beim Laden im Browser einen evtl. gespeicherten Token wiederherstellen.
-if (browser) {
-  auth.token = localStorage.getItem(KEY) ?? '';
-}
-
-export const isLoggedIn = () => auth.token !== '';
-
-export function setToken(token: string): void {
-  auth.token = token;
-  if (browser) {
-    if (token) localStorage.setItem(KEY, token);
-    else localStorage.removeItem(KEY);
+async function checkAuth() {
+  if (!browser) return;
+  try {
+    const res = await fetch('/api/auth/verify', { credentials: 'include' });
+    auth.isLoggedIn = res.ok;
+  } catch {
+    auth.isLoggedIn = false;
   }
 }
 
-export function logout(): void {
-  setToken('');
+if (browser) {
+  checkAuth();
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  auth.isLoggedIn = false;
+}
+
+export async function refreshAuth(): Promise<void> {
+  await checkAuth();
 }

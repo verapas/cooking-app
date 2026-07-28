@@ -24,7 +24,6 @@
       fd.append('image', file);
       const res = await fetch(`/api/recipes/${recipeId}/image`, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + auth.token },
         body: fd
       });
       if (res.status === 401) {
@@ -46,7 +45,7 @@
 </script>
 
 <div class="upload">
-  {#if auth.token}
+  {#if auth.isLoggedIn}
     <input
       bind:this={inputEl}
       type="file"

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       better-sqlite3:
         specifier: ^13.0.1
         version: 13.0.1
@@ -24,6 +27,9 @@ importers:
       '@tsconfig/svelte':
         specifier: ^5.0.8
         version: 5.0.8
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -409,6 +415,9 @@ packages:
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
 
+  '@types/bcryptjs@2.4.6':
+    resolution: {integrity: sha512-9xlo6R2qDs5uixm0bcIqCeMCE6HiQsIyel9KQySStiyqNl2tnj2mP3DX1Nf56MD6KMenNNlBBsy3LJ7gUEQPXQ==}
+
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
 
@@ -439,6 +448,9 @@ packages:
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
+
+  bcryptjs@2.4.3:
+    resolution: {integrity: sha512-V/Hy/X9Vt7f3BbPJEi8BdVFMByHi+jNXrYkW3huaybV/kQ0KJg0Y6PkEMbn+zeT+i+SiKZ/HMqJGIIt4LZDqNQ==}
 
   better-sqlite3@13.0.1:
     resolution: {integrity: sha512-LYpmOXdkpQYf4wmlxkdzW01XGlOXNIbjLg45yNkh0FQ4814VbK9PdOFmhZpYbej+EZtR/i3FDdhEG98HqZdgnA==}
@@ -1034,6 +1046,8 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@types/bcryptjs@2.4.6': {}
+
   '@types/better-sqlite3@7.6.13':
     dependencies:
       '@types/node': 24.13.3
@@ -1055,6 +1069,8 @@ snapshots:
   aria-query@5.3.1: {}
 
   axobject-query@4.1.0: {}
+
+  bcryptjs@2.4.3: {}
 
   better-sqlite3@13.0.1:
     dependencies:

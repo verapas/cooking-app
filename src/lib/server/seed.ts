@@ -3,6 +3,9 @@
 // nicht leer startet. Idempotent: läuft nur, wenn noch keine Rezepte da sind.
 
 import { countRecipes, createCategory, createRecipe } from './queries';
+import { deleteUser, createUser, getDb } from './db';
+import bcrypt from 'bcryptjs';
+import { env } from '$env/dynamic/private';
 import type { CategoryInput, RecipeInput } from '$lib/types';
 
 const CATEGORIES: CategoryInput[] = [
@@ -143,6 +146,15 @@ const RECIPES: RecipeInput[] = [
     ]
   }
 ];
+
+export async function seedUser(): Promise<void> {
+  const adminUsername = env.ADMIN_USERNAME ?? 'admin';
+  const adminPassword = env.ADMIN_PASSWORD ?? 'change-me-please';
+
+  deleteUser(adminUsername);
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  createUser(adminUsername, passwordHash);
+}
 
 export function seedIfEmpty(): void {
   if (countRecipes() > 0) return;

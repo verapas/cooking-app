@@ -1,18 +1,13 @@
 import type { Handle } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { seedIfEmpty } from '$lib/server/seed';
+import { seedIfEmpty, seedUser } from '$lib/server/seed';
+import { validateSession, cleanupExpiredSessions } from '$lib/server/db';
 
-const DEFAULT_TOKEN = 'change-me-please';
+const DEFAULT_PASSWORD = 'change-me-please';
 
-// Einmalige Initialisierung der Datenbank (Schema passiert beim Import von
-// $lib/server/db, Seed hier beim ersten Request).
 let initialized = false;
 
-/**
- * Schreibende API-Zugriffe (alles außer GET/HEAD/OPTIONS unter /api/*)
- * erfordern einen gültigen Bearer-Token. So kann Open Claw Rezepte
- * anlegen/ändern/löschen, ohne dass die App für jeden offen ist.
- */
 function unauthorized(body: string, status: number): Response {
   return new Response(JSON.stringify({ error: body }), {
     status,
@@ -23,26 +18,41 @@ function unauthorized(body: string, status: number): Response {
 export const handle: Handle = async ({ event, resolve }) => {
   if (!initialized) {
     initialized = true;
+    await seedUser();
     seedIfEmpty();
+  }
+
+  const adminPassword = env.ADMIN_PASSWORD ?? DEFAULT_PASSWORD;
+
+  const publicPaths = ['/login', '/api/auth/login', '/api/auth/logout', '/api/auth/verify'];
+  const isPublicPath = publicPaths.some(path => event.url.pathname.startsWith(path));
+
+  if (!isPublicPath) {
+    const sessionId = event.cookies.get('session');
+    if (!sessionId || !validateSession(sessionId)) {
+      return redirect(302, '/login');
+    }
+    cleanupExpiredSessions();
   }
 
   const isApi = event.url.pathname.startsWith('/api/');
   const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(event.request.method);
+  const isAuthApi = event.url.pathname.startsWith('/api/auth/');
 
-  if (isApi && isWrite) {
-    const token = env.COOKING_API_TOKEN;
-    if (!token || token === DEFAULT_TOKEN) {
-      // Token auf dem Server nicht konfiguriert → Schreiben blockieren.
+  if (isApi && isWrite && !isAuthApi) {
+    if (!adminPassword || adminPassword === DEFAULT_PASSWORD) {
       return unauthorized(
-        'COOKING_API_TOKEN ist auf dem Server nicht konfiguriert.',
+        'ADMIN_PASSWORD ist auf dem Server nicht konfiguriert.',
         503
       );
     }
-    const auth = event.request.headers.get('authorization') ?? '';
-    const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-    if (!provided || provided !== token) {
+
+    const sessionId = event.cookies.get('session');
+    if (!sessionId || !validateSession(sessionId)) {
       return unauthorized('Unauthorized', 401);
     }
+
+    cleanupExpiredSessions();
   }
 
   return resolve(event);

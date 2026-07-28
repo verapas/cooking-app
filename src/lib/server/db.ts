@@ -65,6 +65,22 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ingredients_recipe  ON ingredients(recipe_id);
   CREATE INDEX IF NOT EXISTS idx_ingredients_step    ON ingredients(step_id);
 
+  CREATE TABLE IF NOT EXISTS users (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    username       TEXT NOT NULL UNIQUE,
+    password_hash  TEXT NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    id          TEXT PRIMARY KEY,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
+
   -- updated_at automatisch pflegen
   CREATE TRIGGER IF NOT EXISTS recipes_updated_at
     AFTER UPDATE ON recipes
@@ -76,4 +92,41 @@ db.exec(`
 
 export function getDb(): DB {
   return db;
+}
+
+export function createSession(sessionId: string): void {
+  const stmt = db.prepare('INSERT INTO sessions (id) VALUES (?)');
+  stmt.run(sessionId);
+}
+
+export function validateSession(sessionId: string): boolean {
+  const stmt = db.prepare('SELECT created_at FROM sessions WHERE id = ?');
+  const result = stmt.get(sessionId) as { created_at: string } | undefined;
+  return result !== undefined;
+}
+
+export function deleteSession(sessionId: string): void {
+  const stmt = db.prepare('DELETE FROM sessions WHERE id = ?');
+  stmt.run(sessionId);
+}
+
+export function cleanupExpiredSessions(): void {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const stmt = db.prepare('DELETE FROM sessions WHERE created_at < ?');
+  stmt.run(sevenDaysAgo);
+}
+
+export function getUserByUsername(username: string): { id: number; username: string; password_hash: string } | undefined {
+  const stmt = db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?');
+  return stmt.get(username) as { id: number; username: string; password_hash: string } | undefined;
+}
+
+export function createUser(username: string, passwordHash: string): void {
+  const stmt = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
+  stmt.run(username, passwordHash);
+}
+
+export function deleteUser(username: string): void {
+  const stmt = db.prepare('DELETE FROM users WHERE username = ?');
+  stmt.run(username);
 }
