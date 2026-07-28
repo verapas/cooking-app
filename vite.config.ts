@@ -1,7 +1,12 @@
-import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
 
-// https://vite.dev/config/
+// SvelteKit nutzt Vite als Bundler. Das Plugin stellt Routing,
+// SSR und Server-Routen bereit.
 export default defineConfig({
-  plugins: [svelte()],
-})
+  plugins: [sveltekit()],
+  server: {
+    // Im lokalen Netzwerk von anderen Geräten (Handy) erreichbar.
+    host: true,
+  },
+});

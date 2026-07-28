@@ -1,47 +1,92 @@
-# Svelte + TS + Vite
+# Koch-App 🍳
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+Mobile-first Web-App für Kochrezepte, gebaut mit **SvelteKit + SQLite**.
+Läuft als Node-Prozess (`adapter-node`) – z.&nbsp;B. auf einem Proxmox-Server.
 
-## Recommended IDE Setup
+## Features
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+- 📱 Mobile-first, Dark-Theme (Koch-Modus – blendet beim Kochen nicht)
+- 🗂️ Kategorien-Navigation (Frühstück, Hauptgericht, …)
+- 📖 Rezept-Detail in zwei Ansichten:
+  - **Klassisch**: komplette Zutatenliste + nummerierte Schritte
+  - **Schritt für Schritt**: iterierbarer Stepper mit **aktivem Timer**
+    (Signalton, Vibration, Bildschirm-Wachhaltung)
+- 🔢 **Portionen-Umschalter**: alle Mengen skalieren live mit
+- 🔌 **REST-API** zum Anlegen/Ändern/Löschen von Rezepten
+  (z.&nbsp;B. für eine LLM-/Agent-Instanz wie Open Claw)
 
-## Need an official Svelte framework?
+## Stack
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+- SvelteKit 2 + Svelte 5 (Runes) + TypeScript
+- SQLite via `better-sqlite3` (nur server-seitig)
+- `@sveltejs/adapter-node`
 
-## Technical considerations
+## Entwicklung
 
-**Why use this over SvelteKit?**
-
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
-
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
-
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
-
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
-
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```bash
+pnpm install
+cp .env.example .env      # dann COOKING_API_TOKEN setzen!
+pnpm dev                  # http://localhost:5173
+pnpm check                # Typecheck
 ```
+
+## Produktion / Deploy (Proxmox)
+
+```bash
+pnpm build                # erzeugt build/
+COOKING_API_TOKEN=<token> \
+DATABASE_PATH=/var/lib/cooking-app/db.sqlite \
+PORT=3000 \
+node build
+```
+
+Der Server lauscht auf `PORT` (default 3000). Hinter einem Reverse-Proxy
+(Nginx/Caddy) betreiben und `ORIGIN` auf die öffentliche URL setzen.
+
+## API (für Open Claw / Agenten)
+
+Schreibzugriffe (POST/PUT/DELETE) benötigen
+`Authorization: Bearer <COOKING_API_TOKEN>`. GET ist offen.
+
+| Methode | Route | Beschreibung |
+| --- | --- | --- |
+| GET | `/api/recipes?category_id=&q=` | Rezept-Liste |
+| GET | `/api/recipes/:id` | Rezept-Detail (mit Zutaten + Schritten) |
+| POST | `/api/recipes` | Rezept anlegen |
+| PUT | `/api/recipes/:id` | Rezept ändern |
+| DELETE | `/api/recipes/:id` | Rezept löschen |
+| GET | `/api/categories` | Kategorien |
+| POST | `/api/categories` | Kategorie anlegen |
+
+### Beispiel: Rezept anlegen
+
+```bash
+curl -X POST http://localhost:3000/api/recipes \
+  -H "Authorization: Bearer $COOKING_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Tomaten-Mozzarella-Pasta",
+    "category_slug": "hauptgericht",
+    "base_servings": 2,
+    "steps": [
+      {"order": 1, "instruction": "Pasta kochen.", "duration_sec": 600},
+      {"order": 2, "instruction": "Tomaten anbraten, Mozzarella unterheben."}
+    ],
+    "ingredients": [
+      {"name": "Spaghetti",   "quantity": 200, "unit": "g", "step_order": 1},
+      {"name": "Kirschtomaten","quantity": 250, "unit": "g", "step_order": 2},
+      {"name": "Mozzarella",  "quantity": 125, "unit": "g", "step_order": 2}
+    ]
+  }'
+```
+
+- `quantity` **muss numerisch** sein (sonst kann nicht skaliert werden).
+  `0`/`null` bedeutet „nach Geschmack“ – die Menge wird dann ausgeblendet.
+- `step_order` ordnet eine Zutat einem Schritt zu (1-basiert, nach `order`).
+  Fehlt der Wert, erscheint die Zutat in der globalen Zutatenliste.
+- `duration_sec` aktiviert den Timer für diesen Schritt.
+
+## Datenmodell
+
+`categories` → `recipes` → `steps` / `ingredients` (Zutaten sind optional
+einem Schritt zugeordnet). Details siehe `src/lib/server/db.ts`.
