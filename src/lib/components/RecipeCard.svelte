@@ -1,11 +1,40 @@
 <script lang="ts">
   import type { RecipeListItem } from '$lib/types';
+  import { auth } from '$lib/auth.svelte';
+  import { untrack } from 'svelte';
 
   let { recipe }: { recipe: RecipeListItem } = $props();
 
   let totalMin = $derived(
     (recipe.prep_time_min ?? 0) + (recipe.cook_time_min ?? 0)
   );
+
+  let isFavorite = $state(untrack(() => recipe.is_favorite));
+  let isOptimistic = $state(false);
+
+  async function toggleFavorite(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newFavorite = !isFavorite;
+    isOptimistic = true;
+    isFavorite = newFavorite;
+
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/favorite`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (!res.ok) {
+        isFavorite = !newFavorite;
+      }
+    } catch {
+      isFavorite = !newFavorite;
+    } finally {
+      isOptimistic = false;
+    }
+  }
 
   function formatTime(m: number): string {
     if (m <= 0) return '';
@@ -24,6 +53,16 @@
       <img src={recipe.image_url} alt="" loading="lazy" />
     {:else}
       <div class="thumb-emoji" aria-hidden="true">🍽️</div>
+    {/if}
+    {#if auth.isLoggedIn}
+      <button
+        class="fav-btn"
+        class:fav-active={isFavorite}
+        aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+        onclick={toggleFavorite}
+      >
+        {isFavorite ? '★' : '☆'}
+      </button>
     {/if}
   </div>
   <div class="body">
@@ -70,6 +109,42 @@
   .thumb-emoji {
     font-size: 2.6rem;
     opacity: 0.85;
+  }
+
+  .fav-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(15, 12, 8, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .fav-btn:hover {
+    transform: scale(1.05);
+    background: rgba(15, 12, 8, 0.95);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .fav-btn.fav-active {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+
+  .fav-btn:active {
+    transform: scale(0.95);
   }
 
   .body {

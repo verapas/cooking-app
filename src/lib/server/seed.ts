@@ -4,6 +4,7 @@
 
 import { countRecipes, createCategory, createRecipe } from './queries';
 import { deleteUser, createUser, getDb } from './db';
+import { listRecipes } from './queries';
 import bcrypt from 'bcryptjs';
 import { env } from '$env/dynamic/private';
 import type { CategoryInput, RecipeInput } from '$lib/types';
@@ -147,6 +148,66 @@ const RECIPES: RecipeInput[] = [
   }
 ];
 
+const RECIPE_VARIANTS: RecipeInput[] = [
+  {
+    title: 'Spaghetti Bolognese',
+    parent_recipe_id: 0,
+    version_name: 'Schnelle Version',
+    description: 'Schnelle Variante mit weniger Kochzeit für den Alltag.',
+    category_slug: 'pasta',
+    base_servings: 4,
+    prep_time_min: 10,
+    cook_time_min: 30,
+    source: 'Demo-Variante',
+    steps: [
+      { order: 1, instruction: 'Zwiebeln und Knoblauch fein würfeln. In Olivenöl kurz anbraten.' },
+      { order: 2, instruction: 'Hackfleisch zugeben und krümelig anbraten.' },
+      { order: 3, instruction: 'Passierte Tomaten und Tomatenmark einrühren. 15 Minuten köcheln lassen.', duration_sec: 900 },
+      { order: 4, instruction: 'Spaghetti kochen bis al dente.' },
+      { order: 5, instruction: 'Sauce mit Nudeln vermengen und servieren.' }
+    ],
+    ingredients: [
+      { name: 'Zwiebeln', quantity: 1, unit: 'Stück', step_order: 1, sort_order: 0 },
+      { name: 'Knoblauch', quantity: 1, unit: 'Zehe', step_order: 1, sort_order: 1 },
+      { name: 'Olivenöl', quantity: 2, unit: 'EL', step_order: 1, sort_order: 2 },
+      { name: 'Hackfleisch (Rind)', quantity: 500, unit: 'g', step_order: 2, sort_order: 3 },
+      { name: 'Passierte Tomaten', quantity: 800, unit: 'g', step_order: 3, sort_order: 4 },
+      { name: 'Tomatenmark', quantity: 2, unit: 'EL', step_order: 3, sort_order: 5 },
+      { name: 'Spaghetti', quantity: 400, unit: 'g', step_order: 4, sort_order: 6 }
+    ]
+  },
+  {
+    title: 'Spaghetti Bolognese',
+    parent_recipe_id: 0,
+    version_name: 'Vegetarisch',
+    description: 'Vegetarische Variante mit Tofu anstelle von Hackfleisch.',
+    category_slug: 'pasta',
+    base_servings: 4,
+    prep_time_min: 15,
+    cook_time_min: 40,
+    source: 'Demo-Variante',
+    steps: [
+      { order: 1, instruction: 'Zwiebeln und Knoblauch fein würfeln. In Olivenöl glasig dünsten.', duration_sec: 300 },
+      { order: 2, instruction: 'Tofu krümelig zerdrücken und mitbraten. Mit Paprikapulver würzen.' },
+      { order: 3, instruction: 'Passierte Tomaten, Tomatenmark und Gemüsebrühe einrühren. Aufkochen, dann 20 Minuten köcheln lassen.', duration_sec: 1200 },
+      { order: 4, instruction: 'Spaghetti in Salzwasser kochen bis al dente.', duration_sec: 540 },
+      { order: 5, instruction: 'Sauce mit Nudeln vermengen. Mit frischem Basilikum garnieren.' }
+    ],
+    ingredients: [
+      { name: 'Zwiebeln', quantity: 2, unit: 'Stück', step_order: 1, sort_order: 0 },
+      { name: 'Knoblauch', quantity: 2, unit: 'Zehen', step_order: 1, sort_order: 1 },
+      { name: 'Olivenöl', quantity: 2, unit: 'EL', step_order: 1, sort_order: 2 },
+      { name: 'Tofu', quantity: 300, unit: 'g', step_order: 2, sort_order: 3 },
+      { name: 'Paprikapulver', quantity: 1, unit: 'TL', step_order: 2, sort_order: 4 },
+      { name: 'Passierte Tomaten', quantity: 800, unit: 'g', step_order: 3, sort_order: 5 },
+      { name: 'Tomatenmark', quantity: 2, unit: 'EL', step_order: 3, sort_order: 6 },
+      { name: 'Gemüsebrühe', quantity: 100, unit: 'ml', step_order: 3, sort_order: 7 },
+      { name: 'Spaghetti', quantity: 400, unit: 'g', step_order: 4, sort_order: 8 },
+      { name: 'Basilikum (frisch)', quantity: 0, unit: 'zum Garnieren', sort_order: 9 }
+    ]
+  }
+];
+
 export async function seedUser(): Promise<void> {
   const adminUsername = env.ADMIN_USERNAME ?? 'admin';
   const adminPassword = env.ADMIN_PASSWORD ?? 'change-me-please';
@@ -158,6 +219,19 @@ export async function seedUser(): Promise<void> {
 
 export function seedIfEmpty(): void {
   if (countRecipes() > 0) return;
+  
   for (const c of CATEGORIES) createCategory(c);
   for (const r of RECIPES) createRecipe(r);
+
+  const db = getDb();
+  const mainRecipe = db.prepare('SELECT id FROM recipes WHERE title = ? AND parent_recipe_id IS NULL').get('Spaghetti Bolognese') as { id: number } | undefined;
+
+  if (mainRecipe) {
+    for (const variant of RECIPE_VARIANTS) {
+      createRecipe({
+        ...variant,
+        parent_recipe_id: mainRecipe.id
+      });
+    }
+  }
 }

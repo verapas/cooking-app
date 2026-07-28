@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getRecipe, getMainRecipeId, listRecipeVersions } from '$lib/server/queries';
+import { listCategories } from '$lib/server/queries';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -9,6 +10,7 @@ export const load: PageServerLoad = async ({ params }) => {
   const mainRecipeId = getMainRecipeId(recipe.id);
   if (!mainRecipeId) throw error(500, 'Ungültiger Rezeptstatus');
   const versions = listRecipeVersions(mainRecipeId);
+  const categories = listCategories();
 
-  return { recipe, versions };
+  return { recipe, versions, categories };
 };

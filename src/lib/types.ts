@@ -18,6 +18,9 @@ export interface Recipe {
   cook_time_min: number | null;
   image_url: string | null;
   source: string | null;
+  is_favorite: boolean;
+  parent_recipe_id: number | null;
+  version_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,13 +88,30 @@ export interface RecipeInput {
   cook_time_min?: number | null;
   image_url?: string | null;
   source?: string | null;
+  /** Für Varianten: ID des Elternrezepts */
+  parent_recipe_id?: number | null;
+  /** Für Varianten: Name der Version (z.B. "Übernacht garen") */
+  version_name?: string | null;
   ingredients?: IngredientInput[];
   steps?: StepInput[];
+}
+
+export interface RecipeVersion {
+  id: number;
+  version_name: string | null;
+  is_main: boolean;
 }
 
 export interface CategoryInput {
   name: string;
   slug: string;
+  icon?: string | null;
+  sort_order?: number;
+}
+
+export interface CategoryUpdateInput {
+  name?: string;
+  slug?: string;
   icon?: string | null;
   sort_order?: number;
 }

@@ -35,6 +35,10 @@
         <span class="ic">🏠</span> Alle Rezepte
       </a>
 
+      <a class="item" href="/favorites" class:active={page.url.pathname === '/favorites'}>
+        <span class="ic">⭐</span> Favoriten
+      </a>
+
       <p class="grouplabel">Kategorien</p>
       <div class="catlist">
         {#each categories as c (c.id)}

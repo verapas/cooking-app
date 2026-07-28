@@ -38,6 +38,7 @@ db.exec(`
     cook_time_min INTEGER,
     image_url     TEXT,
     source        TEXT,
+    is_favorite   INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -89,6 +90,25 @@ db.exec(`
     UPDATE recipes SET updated_at = datetime('now') WHERE id = OLD.id;
   END;
 `);
+
+// Migration: parent_recipe_id und version_name zu recipes hinzufügen (wenn nicht vorhanden)
+const pragmaInfo = db.pragma('table_info(recipes)') as { name: string }[];
+const hasParentRecipeId = pragmaInfo.some((c) => c.name === 'parent_recipe_id');
+const hasVersionName = pragmaInfo.some((c) => c.name === 'version_name');
+const hasIsFavorite = pragmaInfo.some((c) => c.name === 'is_favorite');
+
+if (!hasParentRecipeId) {
+  db.exec('ALTER TABLE recipes ADD COLUMN parent_recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE');
+}
+if (!hasVersionName) {
+  db.exec('ALTER TABLE recipes ADD COLUMN version_name TEXT');
+}
+if (!hasIsFavorite) {
+  db.exec('ALTER TABLE recipes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+}
+
+// Index für parent_recipe_id erstellen (nach Migration)
+db.exec('CREATE INDEX IF NOT EXISTS idx_recipes_parent ON recipes(parent_recipe_id)');
 
 export function getDb(): DB {
   return db;

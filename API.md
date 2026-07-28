@@ -94,9 +94,52 @@ Response:
 
 Status: `201 Created`
 
+### Kategorie aktualisieren
+
+```http
+PUT /api/categories/1
+Content-Type: application/json
+
+{
+  "name": "Suppen Deluxe",
+  "icon": "🥣",
+  "sort_order": 1
+}
+```
+
+Response:
+```json
+{
+  "ok": true
+}
+```
+
+### Kategorie löschen
+
+```http
+DELETE /api/categories/1
+```
+
+Response:
+```json
+{
+  "ok": true
+}
+```
+
+**Hinweis:** Beim Löschen einer Kategorie wird `category_id` der zugehörigen Rezepte auf `NULL` gesetzt (ON DELETE SET NULL).
+
 ## Rezepte
 
-### Liste aller Rezepte
+### Rezept-Versionen
+
+Das System unterstützt Rezept-Varianten (z.B. "Übernacht garen", "Schnelle Version"). Jedes Rezept kann entweder:
+- Ein Hauptrezept sein (`parent_recipe_id IS NULL`)
+- Eine Variante eines Hauptrezepts sein (`parent_recipe_id` verweist auf das Hauptrezept)
+
+Hauptrezepte werden in der Hauptliste angezeigt. Varianten werden nur über den Versions-Dropdown im Rezept-Detail erreichbar.
+
+### Liste aller Rezepte (nur Hauptrezepte)
 
 ```http
 GET /api/recipes
@@ -119,13 +162,14 @@ Response:
     "cook_time_min": 20,
     "image_url": "/images/recipe-1-1234567890.jpg",
     "source": null,
+    "is_favorite": false,
     "created_at": "2024-01-01T12:00:00.000Z",
     "updated_at": "2024-01-01T12:00:00.000Z"
   }
 ]
 ```
 
-### Rezept erstellen
+### Rezept erstellen (Hauptrezept)
 
 ```http
 POST /api/recipes
@@ -183,6 +227,58 @@ Response:
 ```
 
 Status: `201 Created`
+
+### Rezept-Variante erstellen
+
+```http
+POST /api/recipes
+Content-Type: application/json
+
+{
+  "title": "Tomatensuppe",
+  "parent_recipe_id": 1,
+  "version_name": "Übernacht garen",
+  "description": "Länger ziehen lassen für mehr Geschmack",
+  "category_slug": "suppen",
+  "base_servings": 4,
+  "prep_time_min": 10,
+  "cook_time_min": 240,
+  "steps": [
+    {
+      "order": 1,
+      "instruction": "Zwiebeln und Knoblauch im Olivenöl andünsten."
+    },
+    {
+      "order": 2,
+      "instruction": "Passierte Tomaten und Gemüsebrühe zugeben. 4 Stunden köcheln lassen."
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "Zwiebeln",
+      "quantity": 2,
+      "unit": "Stück",
+      "step_order": 1,
+      "sort_order": 0
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "id": 5
+}
+```
+
+Status: `201 Created`
+
+**Wichtig:**
+- `parent_recipe_id`: ID des Hauptrezepts (Pflicht für Varianten)
+- `version_name`: Name der Variante (Pflicht für Varianten, z.B. "Übernacht garen")
+- Varianten erben das Bild des Hauptrezepts (kann überschrieben werden)
+- Die Liste zeigt nur Hauptrezepte an
 
 ### Einzelnes Rezept abrufen
 
@@ -261,6 +357,30 @@ Response:
 }
 ```
 
+### Rezept-Varianten auflisten
+
+```http
+GET /api/recipes/1/versions
+```
+
+Response:
+```json
+[
+  {
+    "id": 1,
+    "version_name": null,
+    "is_main": true
+  },
+  {
+    "id": 5,
+    "version_name": "Übernacht garen",
+    "is_main": false
+  }
+]
+```
+
+**Hinweis:** Die Hauptversion wird immer zuerst angezeigt.
+
 ### Rezept löschen
 
 ```http
@@ -273,6 +393,51 @@ Response:
   "ok": true
 }
 ```
+
+## Favoriten
+
+### Favoriten auflisten
+
+```http
+GET /api/favorites
+```
+
+Response:
+```json
+[
+  {
+    "id": 1,
+    "title": "Tomatensuppe",
+    "description": "Lecker",
+    "category_id": 1,
+    "category_name": "Suppen",
+    "category_slug": "suppen",
+    "base_servings": 2,
+    "prep_time_min": 5,
+    "cook_time_min": 20,
+    "image_url": "/images/recipe-1-1234567890.jpg",
+    "source": null,
+    "is_favorite": true,
+    "created_at": "2024-01-01T12:00:00.000Z",
+    "updated_at": "2024-01-01T12:00:00.000Z"
+  }
+]
+```
+
+### Favorit-Status umschalten
+
+```http
+POST /api/recipes/1/favorite
+```
+
+Response:
+```json
+{
+  "ok": true
+}
+```
+
+Schaltet den Favorit-Status eines Rezepts um (aus/an).
 
 ## Bilder
 
@@ -328,8 +493,21 @@ Löscht automatisch das alte Bild, wenn vorhanden.
   cook_time_min: number | null;
   image_url: string | null;
   source: string | null;
+  is_favorite: boolean;
+  parent_recipe_id: number | null;
+  version_name: string | null;
   created_at: string;
   updated_at: string;
+}
+```
+
+### RecipeVersion
+
+```typescript
+{
+  id: number;
+  version_name: string | null;
+  is_main: boolean;
 }
 ```
 

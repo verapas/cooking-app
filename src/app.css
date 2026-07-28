@@ -94,7 +94,7 @@ button {
   width: 100%;
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 16px 24px;
 }
 
 .card {
@@ -122,14 +122,14 @@ button {
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
   border-color: var(--accent);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .chip {

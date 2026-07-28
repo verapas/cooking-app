@@ -25,6 +25,9 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!body?.title || typeof body.title !== 'string') {
     throw error(422, 'Feld "title" ist erforderlich');
   }
+  if (body.parent_recipe_id && !body.version_name) {
+    throw error(422, 'Feld "version_name" ist erforderlich für Varianten');
+  }
   const id = createRecipe(body);
   return json({ id }, { status: 201 });
 };
