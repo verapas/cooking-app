@@ -3,12 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.17.0",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "docker:dev": "docker compose -f compose.dev.yaml up -d --build",
+    "docker:logs": "docker compose -f compose.dev.yaml logs -f",
+    "docker:down": "docker compose -f compose.dev.yaml down",
+    "docker:reset": "docker compose -f compose.dev.yaml down -v"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.7",
@@ -16,7 +24,6 @@
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.13.2",
     "@vite-pwa/sveltekit": "^1.1.0",
     "canvas": "^3.2.3",
@@ -28,7 +35,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^13.0.1",
+    "mysql2": "^3.23.2",
     "sweetalert2": "^11.26.25"
   }
 }

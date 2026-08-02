@@ -11,7 +11,7 @@ export const PUT: RequestHandler = async ({ params, cookies, request }) => {
   }
 
   const session = cookies.get('session');
-  if (!session || !verifySession(session)) {
+  if (!session || !(await verifySession(session))) {
     throw error(401, 'Unauthorized');
   }
 
@@ -22,7 +22,7 @@ export const PUT: RequestHandler = async ({ params, cookies, request }) => {
     throw error(400, 'Ungültiges JSON');
   }
 
-  const success = updateCategory(id, body);
+  const success = await updateCategory(id, body);
   if (!success) {
     throw error(404, 'Kategorie nicht gefunden');
   }
@@ -37,11 +37,11 @@ export const DELETE: RequestHandler = async ({ params, cookies }) => {
   }
 
   const session = cookies.get('session');
-  if (!session || !verifySession(session)) {
+  if (!session || !(await verifySession(session))) {
     throw error(401, 'Unauthorized');
   }
 
-  const success = deleteCategory(id);
+  const success = await deleteCategory(id);
   if (!success) {
     throw error(404, 'Kategorie nicht gefunden');
   }

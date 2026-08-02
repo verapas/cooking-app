@@ -5,7 +5,7 @@ import type { CategoryInput } from '$lib/types';
 
 // GET /api/categories  (offen)
 export const GET: RequestHandler = async () => {
-  return json(listCategories());
+  return json(await listCategories());
 };
 
 // POST /api/categories  (Token-geschützt)
@@ -19,6 +19,6 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!body?.name || !body?.slug) {
     throw error(422, 'Felder "name" und "slug" sind erforderlich');
   }
-  const id = createCategory(body);
+  const id = await createCategory(body);
   return json({ id }, { status: 201 });
 };

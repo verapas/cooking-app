@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { env } from '$env/dynamic/private';
-import { db } from '$lib/server/db';
+import { getRecipeImageUrl, setRecipeImageUrl } from '$lib/server/queries';
 import type { RequestHandler } from './$types';
 
 const IMAGES_DIR = resolve(env.IMAGES_DIR ?? './data/images');
@@ -20,16 +20,14 @@ const EXT_BY_TYPE: Record<string, string> = {
 export const POST: RequestHandler = async ({ params, request }) => {
   const id = Number(params.id);
 
-  const row = db
-    .prepare('SELECT id, image_url FROM recipes WHERE id = ?')
-    .get(id) as { id: number; image_url: string | null } | undefined;
+  const row = await getRecipeImageUrl(id);
   if (!row) throw error(404, 'Rezept nicht gefunden');
 
   const form = await request.formData();
   const file = form.get('image');
   if (!(file instanceof File)) throw error(400, 'Feld "image" fehlt');
   if (file.size === 0) throw error(400, 'Leere Datei');
-  if (file.size > MAX_BYTES) throw error(413, 'Datei zu groß (max. 5 MB)');
+  if (file.size > MAX_BYTES) throw error(413, 'Datei zu groß (max. 20 MB)');
 
   const ext = EXT_BY_TYPE[file.type];
   if (!ext) throw error(415, 'Nur JPG, PNG, WebP oder GIF');
@@ -45,7 +43,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   const url = `/images/${name}`;
-  db.prepare('UPDATE recipes SET image_url = ? WHERE id = ?').run(url, id);
+  await setRecipeImageUrl(id, url);
 
   // Altes Bild aufräumen (nur eigene Uploads unter /images/)
   if (row.image_url?.startsWith('/images/')) {

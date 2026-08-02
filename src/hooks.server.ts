@@ -19,7 +19,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (!initialized) {
     initialized = true;
     await seedUser();
-    seedIfEmpty();
+    await seedIfEmpty();
   }
 
   const adminPassword = env.ADMIN_PASSWORD ?? DEFAULT_PASSWORD;
@@ -29,10 +29,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   if (!isPublicPath) {
     const sessionId = event.cookies.get('session');
-    if (!sessionId || !validateSession(sessionId)) {
+    if (!sessionId || !(await validateSession(sessionId))) {
       return redirect(302, '/login');
     }
-    cleanupExpiredSessions();
+    await cleanupExpiredSessions();
   }
 
   const isApi = event.url.pathname.startsWith('/api/');
@@ -48,11 +48,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     const sessionId = event.cookies.get('session');
-    if (!sessionId || !validateSession(sessionId)) {
+    if (!sessionId || !(await validateSession(sessionId))) {
       return unauthorized('Unauthorized', 401);
     }
 
-    cleanupExpiredSessions();
+    await cleanupExpiredSessions();
   }
 
   return resolve(event);

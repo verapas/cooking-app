@@ -1,0 +1,93 @@
+# =====================================================================
+# Dev-Compose — baut das Image LOKAL und startet mariadb + migrator + app
+# =====================================================================
+# Für lokale Tests des vollen Stacks (Build → Migration → laufende App).
+# NICHT für Produktion — dort zieht der Server das fertige Image aus GHCR
+# (siehe deploy/compose.example.yaml).
+#
+# Nutzung:
+#   pnpm docker:dev          # bauen + starten (detached)
+#   pnpm docker:logs         # Logs aller Services anschauen
+#   pnpm docker:down         # alles stoppen (Volumes bleiben erhalten)
+#   pnpm docker:reset        # alles stopfen + DB-Volume löschen (frischer Seed)
+#
+# Was passiert beim ersten Start:
+#   1. mariadb hochfahren + auf healthy warten
+#   2. migrator läuft einmalig: legt Schema aus db/migration/ an
+#   3. app startet: verbindet sich zu mariadb, legt Admin-User + Demo-Daten an
+# Danach erreichbar unter http://localhost:3000 (Login: admin / devpassword).
+# =====================================================================
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: koch-mariadb-dev
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: devrootpw
+      MARIADB_DATABASE: cooking
+      MARIADB_USER: cooking
+      MARIADB_PASSWORD: devdbpw
+    volumes:
+      - koch-db-dev:/var/lib/mysql
+    # Kein Port-Publishing in Dev nötig — die App spricht mariadb über das
+    # interne Compose-Netzwerk an. Falls du mit einem DB-Client (DBeaver
+    # etc.) auf die DB willst, die nächste Zeile einkommentieren:
+    # ports:
+    #   - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  migrator:
+    image: flyway/flyway:11
+    container_name: koch-migrator-dev
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    # SQL-Files aus dem Repo einbinden. Pfad relativ zu dieser compose.yaml
+    # (die im Root liegt) → ./db/migration.
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+    command: >
+      -url=jdbc:mariadb://mariadb:3306/cooking
+      -user=cooking
+      -password=devdbpw
+      -connectRetries=60
+      migrate
+    restart: "no"
+
+  app:
+    # Anstelle eines fertigen Images aus einer Registry bauen wir hier
+    # lokal aus dem Dockerfile im aktuellen Verzeichnis (`.´).
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: koch-app:dev
+    container_name: koch-app-dev
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - koch-images-dev:/data/images
+    environment:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: devpassword
+      ORIGIN: http://localhost:3000
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_NAME: cooking
+      DB_USER: cooking
+      DB_PASSWORD: devdbpw
+
+volumes:
+  koch-db-dev:
+  koch-images-dev:

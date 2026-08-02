@@ -2,9 +2,8 @@
 // Legt beim ersten Start Beispiel-Kategorien + Rezepte an, damit die App
 // nicht leer startet. Idempotent: läuft nur, wenn noch keine Rezepte da sind.
 
-import { countRecipes, createCategory, createRecipe } from './queries';
-import { deleteUser, createUser, getDb } from './db';
-import { listRecipes } from './queries';
+import { countRecipes, createCategory, createRecipe, getRecipeIdByTitle } from './queries';
+import { deleteUser, createUser } from './db';
 import bcrypt from 'bcryptjs';
 import { env } from '$env/dynamic/private';
 import type { CategoryInput, RecipeInput } from '$lib/types';
@@ -212,25 +211,25 @@ export async function seedUser(): Promise<void> {
   const adminUsername = env.ADMIN_USERNAME ?? 'admin';
   const adminPassword = env.ADMIN_PASSWORD ?? 'change-me-please';
 
-  deleteUser(adminUsername);
+  await deleteUser(adminUsername);
   const passwordHash = await bcrypt.hash(adminPassword, 10);
-  createUser(adminUsername, passwordHash);
+  await createUser(adminUsername, passwordHash);
 }
 
-export function seedIfEmpty(): void {
-  if (countRecipes() > 0) return;
-  
-  for (const c of CATEGORIES) createCategory(c);
-  for (const r of RECIPES) createRecipe(r);
+export async function seedIfEmpty(): Promise<void> {
+  if ((await countRecipes()) > 0) return;
 
-  const db = getDb();
-  const mainRecipe = db.prepare('SELECT id FROM recipes WHERE title = ? AND parent_recipe_id IS NULL').get('Spaghetti Bolognese') as { id: number } | undefined;
+  for (const c of CATEGORIES) await createCategory(c);
+  for (const r of RECIPES) await createRecipe(r);
 
-  if (mainRecipe) {
+  // Hauptrezept für die Variantenlookup (Bolognese-Parent).
+  const mainRecipeId = await getRecipeIdByTitle('Spaghetti Bolognese');
+
+  if (mainRecipeId) {
     for (const variant of RECIPE_VARIANTS) {
-      createRecipe({
+      await createRecipe({
         ...variant,
-        parent_recipe_id: mainRecipe.id
+        parent_recipe_id: mainRecipeId
       });
     }
   }

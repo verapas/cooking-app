@@ -1,8 +1,8 @@
+# pnpm 11 verlangt explizite Genehmigung für native Build-Scripts.
+# canvas liefert keine prebuilt Binaries für alle Plattformen und braucht
+# daher node-gyp + System-Libs beim Build. better-sqlite3 ist weggefallen
+# (MariaDB wird über den reinen JS mysql2-Treiber angebunden).
 allowBuilds:
-  canvas: set this to true or false
+  canvas: true
 onlyBuiltDependencies:
-  # better-sqlite3@13 liefert vorgefertigte Binaries (prebuilds/) mit,
-  # die zur Laufzeit geladen werden – kein node-gyp-Build nötig.
-  # Wir listen es hier, damit pnpm keinen (hier fehlschlagenden) node-gyp ausführt.
-  - better-sqlite3
   - canvas

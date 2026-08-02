@@ -3,5 +3,5 @@ import type { RequestHandler } from './$types';
 import { listFavorites } from '$lib/server/queries';
 
 export const GET: RequestHandler = async () => {
-  return json(listFavorites());
+  return json(await listFavorites());
 };

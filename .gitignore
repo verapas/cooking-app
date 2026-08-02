@@ -33,9 +33,10 @@ data/
 .devlog.txt
 .prodlog.txt
 
-# Docker
-Dockerfile
-docker-compose*.yaml
-*.md
-.github/
-!CLAUDE.md
+# Docker / CI
+# Wichtig: Dockerfile, .github/workflows und *.md NICHT ignorieren —
+# sie müssen committet sein, damit die GitHub-Actions-Pipeline
+# (insb. der [deploy]-Trigger) überhaupt laufen kann. Lokale
+# compose.yaml (mit echten Secrets) ignorieren wir aber:
+deploy/compose.yaml
+deploy/.env

@@ -1,0 +1,104 @@
+name: Docker Build & Publish
+
+# Baut das Docker-Image und pusht es nach GHCR — aber NUR, wenn die
+# Commit-Message den Marker [deploy] enthält. Ohne den Marker läuft
+# dieser Workflow gar nicht erst (nur ci.yml läuft immer).
+#
+# Beispiel:  git commit -m "feat: bild-upload fixen [deploy]"
+#
+# Tag-Strategie (via metadata-action):
+#   - main-Merge mit [deploy]  → :edge  und  :sha-<short>
+#   - Git-Tag v1.2.3           → :1.2.3, :1.2, :latest  (kommt nur über Tags)
+#
+# :latest entsteht absichtlich NIE über einen main-Merge, damit ein Merge
+# nicht automatisch das Prod-Deployment anfasst. Dein Watchtower auf dem
+# Server sollte auf :edge (oder einen :sha-<short>) hören, nicht auf :latest.
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Gate: Nur bauen+pushen, wenn der Marker [deploy] in der Head-Commit-
+    # Message steht. Bei workflow_dispatch gibt es keinen head_commit →
+    # wir lassen den Lauf zu (manuelle Ausnahme). Bei Tags ebenfalls
+    # ungefiltert laufen lassen (Tags sind ohnehin bewusst gesetzt).
+    if: |
+      github.event_name != 'push' ||
+      github.ref_type == 'tag' ||
+      contains(github.event.head_commit.message, '[deploy]')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # GHCR erwartet lowercase Owner/Repo. github.repository ist
+          # "Owner/Repo"; für gemischte Case wird via translate lowercased.
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=edge,branch=main
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern=latest
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # arm64 würde per QEMU emuliert und ist sehr langsam; nur amd64 bauen.
+          platforms: linux/amd64
+          context: .
+
+  # -------------------------------------------------------------------
+  # Optionaler SSH-Deploy-Job — DEAKTIVIERT.
+  # Dein Watchtower auf dem Server erkennt neue Images selbst und
+  # aktualisiert den Container. Dieser Job ist ein Fallback, falls du
+  # doch manuell per SSH deployen willst. Zum Aktivieren die Kommentare
+  # entfernen und `needs: publish` setzen. Voraussetzung: die Secrets
+  # SSH_HOST, SSH_USER, SSH_KEY sind im Repo hinterlegt.
+  # -------------------------------------------------------------------
+  #
+  # deploy:
+  #   needs: publish
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Install SSH key
+  #       run: |
+  #         mkdir -p ~/.ssh
+  #         echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+  #         chmod 600 ~/.ssh/id_ed25519
+  #         ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+  #
+  #     - name: SSH Deploy
+  #       run: |
+  #         ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+  #           "cd /srv/koch-app && docker compose pull && docker compose up -d"

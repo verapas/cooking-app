@@ -10,11 +10,11 @@ export const POST: RequestHandler = async ({ params, cookies }) => {
   }
 
   const session = cookies.get('session');
-  if (!session || !verifySession(session)) {
+  if (!session || !(await verifySession(session))) {
     throw error(401, 'Unauthorized');
   }
 
-  const success = toggleFavorite(id);
+  const success = await toggleFavorite(id);
   if (!success) {
     throw error(404, 'Rezept nicht gefunden');
   }

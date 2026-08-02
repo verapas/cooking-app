@@ -5,7 +5,7 @@ import type { RecipeInput } from '$lib/types';
 
 // GET /api/recipes/[id]  (offen)
 export const GET: RequestHandler = async ({ params }) => {
-  const recipe = getRecipe(Number(params.id));
+  const recipe = await getRecipe(Number(params.id));
   if (!recipe) throw error(404, 'Rezept nicht gefunden');
   return json(recipe);
 };
@@ -20,14 +20,14 @@ export const PUT: RequestHandler = async ({ params, request }) => {
     throw error(400, 'Ungültiges JSON');
   }
   if (!body?.title) throw error(422, 'Feld "title" ist erforderlich');
-  const ok = updateRecipe(id, body);
+  const ok = await updateRecipe(id, body);
   if (!ok) throw error(404, 'Rezept nicht gefunden');
   return json({ id });
 };
 
 // DELETE /api/recipes/[id]  (Token-geschützt)
 export const DELETE: RequestHandler = async ({ params }) => {
-  const ok = deleteRecipe(Number(params.id));
+  const ok = await deleteRecipe(Number(params.id));
   if (!ok) throw error(404, 'Rezept nicht gefunden');
   return json({ ok: true });
 };

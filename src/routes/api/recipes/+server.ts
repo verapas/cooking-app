@@ -7,7 +7,7 @@ import type { RecipeInput } from '$lib/types';
 export const GET: RequestHandler = async ({ url }) => {
   const categoryId = url.searchParams.get('category_id');
   const q = url.searchParams.get('q') ?? undefined;
-  const recipes = listRecipes({
+  const recipes = await listRecipes({
     categoryId: categoryId ? Number(categoryId) : undefined,
     q: q && q.trim() ? q.trim() : undefined
   });
@@ -28,6 +28,6 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body.parent_recipe_id && !body.version_name) {
     throw error(422, 'Feld "version_name" ist erforderlich für Varianten');
   }
-  const id = createRecipe(body);
+  const id = await createRecipe(body);
   return json({ id }, { status: 201 });
 };

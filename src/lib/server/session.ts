@@ -1,5 +1,5 @@
 import { validateSession } from './db';
 
-export function verifySession(sessionId: string): boolean {
+export async function verifySession(sessionId: string): Promise<boolean> {
   return validateSession(sessionId);
 }

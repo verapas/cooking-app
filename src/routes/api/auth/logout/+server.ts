@@ -4,7 +4,7 @@ import { deleteSession } from '$lib/server/db';
 export async function POST({ cookies }) {
   const sessionId = cookies.get('session');
   if (sessionId) {
-    deleteSession(sessionId);
+    await deleteSession(sessionId);
     cookies.delete('session', { path: '/' });
   }
 

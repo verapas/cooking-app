@@ -1,0 +1,100 @@
+# =====================================================================
+# Koch-App — Beispiel-Compose für Produktion (Proxmox hinter Reverse Proxy)
+# =====================================================================
+# Kopieren nach deploy/compose.yaml und Werte anpassen (Image-Tag,
+# ORIGIN, ADMIN_PASSWORD, DB-Passwörter). Secrets besser aus einer
+# .env-Datei lesen (siehe .env.example im selben Ordner).
+#
+# Drei Services:
+#   1. mariadb  — Datenbank (persistentes Volume)
+#   2. migrator — Flyway-Container, migriert DB vor jedem App-Start,
+#                 beendet sich danach (Einmal-Lauf)
+#   3. app      — SvelteKit-Runtime, startet erst nach erfolgreichem
+#                 Migrator-Lauf
+#
+# Watchtower-Anmerkung: Wenn Watchtower das App-Image updatet, muss es
+# ebenfalls den Migrator mit derselben Version anstoßen, sonst migriert
+# dieser mit veralteten SQL-Files. Daher: APP_TAG für beide Services
+# identisch setzen (Default :edge).
+# =====================================================================
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: koch-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME:-cooking}
+      MARIADB_USER: ${DB_USER:-cooking}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - koch-db:/var/lib/mysql
+    # Kein Port-Publishing — nur internes Netzwerk. Zugriff läuft
+    # ausschließlich über die App, nie von außen.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  migrator:
+    # Flyway-Community-Image. Läuft einmal pro `docker compose up`,
+    # migriert alle anstehenden V*__*.sql aus db/migration/ und beendet
+    # sich dann. Die App wartet über depends_on auf seinen Erfolg.
+    image: flyway/flyway:11
+    container_name: koch-migrator
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    # SQL-Files aus dem Repo (lokal unter db/migration/) einbinden.
+    # Pfad relativ zur compose.yaml → falls du compose an einen anderen
+    # Ort legst, passe ../db/migration entsprechend an.
+    volumes:
+      - ../db/migration:/flyway/sql:ro
+    command: >
+      -url=jdbc:mariadb://mariadb:3306/${DB_NAME:-cooking}
+      -user=${DB_USER:-cooking}
+      -password=${DB_PASSWORD}
+      -connectRetries=60
+      migrate
+    restart: "no"
+
+  app:
+    # Platzhalter — OWNER/REPO durch deinen GitHub-Namen + Repo ersetzen.
+    # Tag via APP_TAG-Variable (Default :edge); Watchtower sollte denselben
+    # Tag für Migrator UND App ziehen, damit beide synchron sind.
+    image: ghcr.io/OWNER/REPO:${APP_TAG:-edge}
+    container_name: koch-app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    ports:
+      # Nur Loopback — der Reverse Proxy (Nginx/Caddy) davor übernimmt
+      # TLS und leitet weiter. Niemals direkt ans Internet!
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # /data enthält nur noch Bilder (DB ist in MariaDB).
+      - koch-images:/data/images
+    env_file:
+      - .env
+    environment:
+      # DB-Verbindung zum mariadb-Service (interner DNS-Name = Service-Name).
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-cooking}
+      DB_USER: ${DB_USER:-cooking}
+      DB_PASSWORD: ${DB_PASSWORD}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+volumes:
+  koch-db:
+  koch-images:

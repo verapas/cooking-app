@@ -1,14 +1,40 @@
-# Copypasted from .gitignore + Docker-spezifische Ergänzungen
+# Verhindert, dass lokale Artefakte/Secrets in den Build-Context wandern.
+# Wichtig: data/ nicht ins Image — sonst wandern die lokale SQLite-DB
+# und alle hochgeladenen Bilder mit ins Image (Security + Größe).
+
+node_modules
 build
 .svelte-kit
-data
-.DS_Store
-.env.*
-coverage
-*.log
-
-# Nicht mehr nötig, da Build-Stage node_modules aus stage-build kopiert
-# node_modules
-
-# SvelteKit temp
 .node_modules
+
+# Lokale Daten (DB-Reste, Bilder, Logs)
+data
+*.log
+.devlog.txt
+.prodlog.txt
+
+# Secrets — niemals ins Image
+.env
+.env.*
+!.env.example
+
+# Git & CI
+.git
+.gitignore
+.github
+
+# Docker-Dateien selbst (werden vom Builder ohnehin gelesen, nicht kopiert)
+Dockerfile
+.dockerignore
+
+# Deploy-Vorlagen brauchen nicht ins App-Image
+deploy
+
+# Editor-/OS-Müll
+.idea
+.vscode
+.DS_Store
+coverage
+
+# Markdown-Doku muss nicht ins Image
+*.md

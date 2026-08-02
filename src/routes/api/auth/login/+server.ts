@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 export async function POST({ request, cookies }) {
   const { username, password } = await request.json();
 
-  const user = getUserByUsername(username);
+  const user = await getUserByUsername(username);
   if (!user) {
     return json({ error: 'Ungültige Zugangsdaten' }, { status: 401 });
   }
@@ -17,7 +17,7 @@ export async function POST({ request, cookies }) {
   }
 
   const sessionId = randomBytes(32).toString('hex');
-  createSession(sessionId);
+  await createSession(sessionId);
 
   cookies.set('session', sessionId, {
     path: '/',

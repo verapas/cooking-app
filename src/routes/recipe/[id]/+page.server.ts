@@ -3,12 +3,13 @@ import { getEffectiveImageUrl, getMainRecipeId, getRecipe, listRecipeVersions } 
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
-  const recipe = getRecipe(Number(params.id));
+  const recipe = await getRecipe(Number(params.id));
   if (!recipe) throw error(404, 'Rezept nicht gefunden');
 
-  const mainRecipeId = getMainRecipeId(recipe.id);
+  const mainRecipeId = await getMainRecipeId(recipe.id);
   if (!mainRecipeId) throw error(500, 'Ungültiger Rezeptstatus');
-  const versions = listRecipeVersions(mainRecipeId);
+  const versions = await listRecipeVersions(mainRecipeId);
+  const imageUrl = await getEffectiveImageUrl(recipe.id);
 
-  return { recipe, versions, imageUrl: getEffectiveImageUrl(recipe.id) };
+  return { recipe, versions, imageUrl };
 };

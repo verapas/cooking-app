@@ -5,6 +5,6 @@ export const load: PageServerLoad = async ({ url }) => {
   const q = url.searchParams.get('q') ?? '';
   return {
     q,
-    results: q.trim() ? searchRecipes(q.trim()) : []
+    results: q.trim() ? await searchRecipes(q.trim()) : []
   };
 };
