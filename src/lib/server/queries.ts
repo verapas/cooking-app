@@ -101,7 +101,7 @@ export function listRecipes(opts?: {
        FROM recipes r
        LEFT JOIN categories c ON c.id = r.category_id
        ${clause}
-       ORDER BY r.created_at DESC
+       ORDER BY r.is_favorite DESC, r.title ASC, r.created_at DESC
        LIMIT ?`
     )
     .all(...params, limit) as (Omit<RecipeListItem, 'is_favorite'> & { is_favorite: number })[];
@@ -166,6 +166,21 @@ export function listRecipeVersions(parentId: number): RecipeVersion[] {
 
 export function getRecipeWithVersion(recipeId: number, versionId: number): RecipeWithDetails | null {
   return getRecipe(versionId);
+}
+
+export function getEffectiveImageUrl(recipeId: number): string | null {
+  const row = db
+    .prepare('SELECT image_url, parent_recipe_id FROM recipes WHERE id = ?')
+    .get(recipeId) as { image_url: string | null; parent_recipe_id: number | null } | undefined;
+  if (!row) return null;
+  if (row.image_url) return row.image_url;
+  if (row.parent_recipe_id != null) {
+    const parent = db
+      .prepare('SELECT image_url FROM recipes WHERE id = ?')
+      .get(row.parent_recipe_id) as { image_url: string | null } | undefined;
+    return parent?.image_url ?? null;
+  }
+  return null;
 }
 
 // ---------- Rezepte: Detail ----------

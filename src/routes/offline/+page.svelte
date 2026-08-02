@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
   let isOnline = $state(navigator.onLine);
 
@@ -21,7 +22,7 @@
 <div class="offline-page">
   <div class="offline-container">
     <div class="icon-large">
-      🍲
+      <Icon name="soup" size={64} />
     </div>
     
     <h1>Offline</h1>
@@ -39,9 +40,9 @@
     <div class="offline-tips">
       <h3>Verfügbare Inhalte:</h3>
       <ul>
-        <li>📱 Zuvor angesehene Rezepte</li>
-        <li>🖼️ Zwischengespeicherte Bilder</li>
-        <li>⚙️ App-Einstellungen</li>
+        <li><Icon name="phone" size={18} /> Zuvor angesehene Rezepte</li>
+        <li><Icon name="image" size={18} /> Zwischengespeicherte Bilder</li>
+        <li><Icon name="settings" size={18} /> App-Einstellungen</li>
       </ul>
     </div>
     
@@ -120,6 +121,9 @@
   }
 
   .offline-tips li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 0;
     color: var(--text-dim);
     font-size: 0.95rem;

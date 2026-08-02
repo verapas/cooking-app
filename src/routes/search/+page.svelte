@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
   let { data }: { data: PageData } = $props();
 </script>
@@ -11,7 +12,7 @@
 
 <main class="container">
   <header class="page-head">
-    <h1>🔍 Suche</h1>
+    <h1><span class="h-ic"><Icon name="search" size={24} /></span> Suche</h1>
   </header>
 
   <form method="GET" class="searchform" role="search">
@@ -21,7 +22,7 @@
       placeholder="Rezept oder Zutat…"
       autocomplete="off"
     />
-    <button type="submit" class="btn btn-primary" aria-label="Suchen">→</button>
+    <button type="submit" class="btn btn-primary" aria-label="Suchen"><Icon name="forward" size={18} /></button>
   </form>
 
   {#if data.q.trim()}
@@ -69,5 +70,10 @@
   }
   .hint {
     margin-top: 14px;
+  }
+  .h-ic {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
   }
 </style>

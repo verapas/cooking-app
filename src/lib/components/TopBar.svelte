@@ -1,5 +1,6 @@
 <script lang="ts">
   import { toggleDrawer } from '$lib/nav.svelte';
+  import Icon from './Icon.svelte';
 </script>
 
 <header class="topbar">
@@ -11,7 +12,9 @@
   >
     <span></span><span></span><span></span>
   </button>
-  <a href="/" class="title">🍳 Koch-App</a>
+  <a href="/" class="title">
+    <span class="logo"><Icon name="pot" size={20} /></span> Koch-App
+  </a>
 </header>
 
 <style>
@@ -55,5 +58,12 @@
     font-size: 1.05rem;
     color: var(--text);
     text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo {
+    color: var(--accent);
+    display: inline-flex;
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import Icon from '$lib/components/Icon.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -36,7 +37,7 @@
 </svelte:head>
 
 <main class="container login">
-  <h1>🔐 Admin-Login</h1>
+  <h1><span class="h-ic"><Icon name="lock" size={28} /></span> Admin-Login</h1>
   <p class="dim">
     Gib Benutzername und Passwort ein, um Bilder hochzuladen. Die Session
     bleibt 7 Tage gültig.
@@ -64,7 +65,7 @@
 
   {#if error}<p class="err">{error}</p>{/if}
 
-  <a href="/" class="back-link">← Zurück zur App</a>
+  <a href="/" class="back-link"><Icon name="back" size={16} /> Zurück zur App</a>
 </main>
 
 <style>
@@ -95,5 +96,10 @@
   .err {
     color: var(--danger);
     margin-top: 12px;
+  }
+  .h-ic {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
   }
 </style>

@@ -98,7 +98,7 @@ rm -f data/cooking.db data/cooking.db-shm data/cooking.db-wal   # beim nächsten
 ## Gotchas (Stolpersteine)
 
 - **better-sqlite3** ist ein natives Modul. pnpm muss sein Build erlauben →
-  steht in `pnpm-workspace.yaml` (`allowBuilds: better-sqlite3: true`).
+  steht in `pnpm-workspace.yaml` (`onlyBuiltDependencies: ["better-sqlite3", "canvas"]`).
   v13 liefert prebuilt Binaries mit (kein node-gyp nötig).
 - **`curl` aus Git-Bash vermasselt multipart-Datei-Uploads** (HTTP 000). Zum Testen
   der Upload-API lieber Node `fetch`+`FormData` nutzen — der Browser macht es eh so.
@@ -147,5 +147,13 @@ pnpm build
 ADMIN_USERNAME=admin ADMIN_PASSWORD=<password> DATABASE_PATH=/var/lib/cooking/db.sqlite \
   IMAGES_DIR=/var/lib/cooking/images PORT=3000 ORIGIN=https://app.example.com node build
 ```
-Hinter einem Reverse Proxy (Nginx/Caddy) betreiben. `data/` (DB + Bilder) persistent
+Hinter einem Reverse Proxy (Nginx/Caddy) betreiben `data/` (DB + Bilder) persistent
 mappen (Volume), damit Rezepte/Bilder einen Neustart überleben.
+
+## Docker & CI
+
+Image-Tags (via `git tag v1.0.0 && git push origin v1.0.0`):
+- `:edge` — Merge auf `main` → `:edge`, `:sha-<short>`
+- `v1.2.3` → `:1.2.3`, `:1.2`, `:latest` (`:latest` nur über Tag, nie per Merge)
+- Deploy: `docker compose pull && up -d` (via SSH-Deploy-Workflow, bei `workflow_dispatch` ausgelöst)
+- `/data` ist das Named Volume für Persistenz.

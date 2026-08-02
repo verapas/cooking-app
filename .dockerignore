@@ -1,0 +1,14 @@
+# Copypasted from .gitignore + Docker-spezifische Ergänzungen
+build
+.svelte-kit
+data
+.DS_Store
+.env.*
+coverage
+*.log
+
+# Nicht mehr nötig, da Build-Stage node_modules aus stage-build kopiert
+# node_modules
+
+# SvelteKit temp
+.node_modules

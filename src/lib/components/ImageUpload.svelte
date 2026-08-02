@@ -1,5 +1,6 @@
 <script lang="ts">
   import { auth } from '$lib/auth.svelte';
+  import Icon from './Icon.svelte';
 
   let {
     recipeId,
@@ -54,11 +55,11 @@
       hidden
     />
     <button class="btn" onclick={() => inputEl?.click()} disabled={busy}>
-      {#if busy}⏳ Lade hoch…{:else}📷 Bild hochladen / ändern{/if}
+      {#if busy}<Icon name="hourglass" size={18} /> Lade hoch…{:else}<Icon name="camera" size={18} /> Bild hochladen / ändern{/if}
     </button>
   {:else}
     <p class="hint">
-      📝 Um ein Bild hinzuzufügen,
+      <Icon name="note" size={16} /> Um ein Bild hinzuzufügen,
       <a href="/login">als Admin einloggen</a>.
     </p>
   {/if}
@@ -73,6 +74,9 @@
     color: var(--text-dim);
     font-size: 0.9rem;
     margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .hint a {
     color: var(--accent);

@@ -2,6 +2,7 @@
   import type { RecipeListItem } from '$lib/types';
   import { auth } from '$lib/auth.svelte';
   import { untrack } from 'svelte';
+  import Icon from './Icon.svelte';
 
   let { recipe }: { recipe: RecipeListItem } = $props();
 
@@ -52,7 +53,7 @@
     {#if recipe.image_url}
       <img src={recipe.image_url} alt="" loading="lazy" />
     {:else}
-      <div class="thumb-emoji" aria-hidden="true">🍽️</div>
+      <div class="thumb-icon" aria-hidden="true"><Icon name="plate" size={56} /></div>
     {/if}
     {#if auth.isLoggedIn}
       <button
@@ -61,7 +62,7 @@
         aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
         onclick={toggleFavorite}
       >
-        {isFavorite ? '★' : '☆'}
+        <Icon name="star" size={18} filled={isFavorite} />
       </button>
     {/if}
   </div>
@@ -71,8 +72,8 @@
     {/if}
     <h3 class="title">{recipe.title}</h3>
     <div class="meta">
-      {#if totalMin > 0}<span>⏱ {formatTime(totalMin)}</span>{/if}
-      <span>👥 {recipe.base_servings}</span>
+      {#if totalMin > 0}<span class="meta-item"><Icon name="timer" size={14} /> {formatTime(totalMin)}</span>{/if}
+      <span class="meta-item"><Icon name="users" size={14} /> {recipe.base_servings}</span>
     </div>
   </div>
 </a>
@@ -106,9 +107,12 @@
     object-fit: cover;
   }
 
-  .thumb-emoji {
-    font-size: 2.6rem;
-    opacity: 0.85;
+  .thumb-icon {
+    color: var(--text-faint);
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .fav-btn {
@@ -124,8 +128,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.3rem;
-    line-height: 1;
     cursor: pointer;
     color: var(--text-dim);
     transition: all 0.15s ease;
@@ -176,5 +178,10 @@
     gap: 10px;
     font-size: 0.78rem;
     color: var(--text-dim);
+  }
+  .meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 </style>

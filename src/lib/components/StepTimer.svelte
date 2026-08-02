@@ -2,6 +2,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { playBeep, unlockAudio, vibrate } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
+  import Icon from './Icon.svelte';
 
   let {
     durationSec,
@@ -94,16 +95,16 @@
 
   <div class="actions">
     {#if finished}
-      <span class="done">✓ Zeit ist um!</span>
-      <button class="btn" onclick={reset}>↺ Zurücksetzen</button>
+      <span class="done"><Icon name="check" size={18} /> Zeit ist um!</span>
+      <button class="btn" onclick={reset}><Icon name="restart" size={18} /> Zurücksetzen</button>
     {:else if running}
-      <button class="btn" onclick={pause}>⏸ Pause</button>
+      <button class="btn" onclick={pause}><Icon name="pause" size={18} /> Pause</button>
     {:else}
       <button class="btn btn-primary bigbtn" onclick={start}>
-        ▶ {remaining < durationSec ? 'Weiter' : 'Timer starten'}
+        <Icon name="play" size={18} filled /> {remaining < durationSec ? 'Weiter' : 'Timer starten'}
       </button>
       {#if remaining < durationSec}
-        <button class="btn" onclick={reset} aria-label="Zurücksetzen">↺</button>
+        <button class="btn" onclick={reset} aria-label="Zurücksetzen"><Icon name="restart" size={18} /></button>
       {/if}
     {/if}
   </div>

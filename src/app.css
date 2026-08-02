@@ -172,6 +172,10 @@ button {
 
 .page-head h1 {
   font-size: 1.6rem;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .page-head .sub {

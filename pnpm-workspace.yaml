@@ -1,3 +1,8 @@
 allowBuilds:
-  better-sqlite3: true
-  canvas: true
+  canvas: set this to true or false
+onlyBuiltDependencies:
+  # better-sqlite3@13 liefert vorgefertigte Binaries (prebuilds/) mit,
+  # die zur Laufzeit geladen werden – kein node-gyp-Build nötig.
+  # Wir listen es hier, damit pnpm keinen (hier fehlschlagenden) node-gyp ausführt.
+  - better-sqlite3
+  - canvas

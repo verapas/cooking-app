@@ -32,3 +32,10 @@ build/
 data/
 .devlog.txt
 .prodlog.txt
+
+# Docker
+Dockerfile
+docker-compose*.yaml
+*.md
+.github/
+!CLAUDE.md

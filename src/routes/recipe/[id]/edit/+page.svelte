@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
   import ImageUpload from '$lib/components/ImageUpload.svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -262,7 +263,7 @@
             <div class="step-actions">
               <button type="button" class="btn-icon" onclick={() => moveStep(step.id, 'up')} disabled={step.order === 1}>↑</button>
               <button type="button" class="btn-icon" onclick={() => moveStep(step.id, 'down')} disabled={step.order === steps.length}>↓</button>
-              <button type="button" class="btn-icon btn-danger" onclick={() => removeStep(step.id)}>🗑️</button>
+              <button type="button" class="btn-icon btn-danger" onclick={() => removeStep(step.id)}><Icon name="trash" size={18} /></button>
             </div>
           </div>
 
@@ -304,7 +305,7 @@
               </div>
             </div>
 
-            <button type="button" class="btn-icon btn-danger" onclick={() => removeIngredient(ingredient.id)}>🗑️</button>
+            <button type="button" class="btn-icon btn-danger" onclick={() => removeIngredient(ingredient.id)}><Icon name="trash" size={18} /></button>
           </div>
 
           <div class="form-group">

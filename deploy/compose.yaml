@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/OWNER/REPO:latest
+    container_name: koch-app
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - koch-data:/data
+      - koch-images:/data/images
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/data/cooking.db
+      - IMAGES_DIR=/data/images
+      - ORIGIN=https://app.example.com
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10m"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'fetch(\"http://localhost:3000/login\").catch(() => process.exit(1)) || exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  koch-data:
+  koch-images:

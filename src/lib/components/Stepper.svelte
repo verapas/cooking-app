@@ -2,6 +2,7 @@
   import type { Ingredient, Step } from '$lib/types';
   import { formatIngredient } from '$lib/portion';
   import StepTimer from './StepTimer.svelte';
+  import Icon from './Icon.svelte';
 
   let {
     steps,
@@ -42,10 +43,10 @@
 
 {#if done}
   <div class="finish">
-    <p class="big">🎉</p>
+    <p class="big"><Icon name="celebrate" size={56} /></p>
     <h2>Guten Appetit!</h2>
     <p class="dim">Das Rezept ist fertig zubereitet.</p>
-    <button class="btn" onclick={restart}>↺ Nochmal kochen</button>
+    <button class="btn" onclick={restart}><Icon name="restart" size={18} /> Nochmal kochen</button>
   </div>
 {:else if current}
   <div class="stepper">
@@ -76,9 +77,9 @@
     </div>
 
     <div class="nav">
-      <button class="btn" onclick={prev} disabled={index === 0}>← Zurück</button>
+      <button class="btn" onclick={prev} disabled={index === 0}><Icon name="back" size={18} /> Zurück</button>
       <button class="btn btn-primary" onclick={next}>
-        {isLast ? 'Fertig ✓' : 'Weiter →'}
+        {isLast ? 'Fertig' : 'Weiter'} <Icon name={isLast ? 'check' : 'forward'} size={18} />
       </button>
     </div>
   </div>
@@ -94,7 +95,7 @@
     margin-top: 18px;
   }
   .finish .big {
-    font-size: 3rem;
+    color: var(--accent);
     margin: 0 0 4px;
   }
   .finish h2 {

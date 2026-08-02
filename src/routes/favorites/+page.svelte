@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
+  import Icon from '$lib/components/Icon.svelte';
 
   let { data }: { data: PageData } = $props();
 </script>
@@ -11,7 +12,7 @@
 
 <main class="container">
   <header class="page-head">
-    <h1>⭐ Favoriten</h1>
+    <h1><span class="h-ic"><Icon name="star" size={24} /></span> Favoriten</h1>
     <p class="sub">{data.recipes.length} gespeicherte Rezepte</p>
   </header>
 
@@ -23,3 +24,11 @@
     {/each}
   </section>
 </main>
+
+<style>
+  .h-ic {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+  }
+</style>

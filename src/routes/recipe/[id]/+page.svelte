@@ -5,15 +5,17 @@
   import IngredientList from '$lib/components/IngredientList.svelte';
   import Stepper from '$lib/components/Stepper.svelte';
   import ImageUpload from '$lib/components/ImageUpload.svelte';
+  import CategoryIcon from '$lib/components/CategoryIcon.svelte';
   import { formatDuration, formatIngredient, scaleFactor } from '$lib/portion';
   import type { RecipeVersion } from '$lib/types';
   import Swal from 'sweetalert2';
+  import Icon from '$lib/components/Icon.svelte';
 
   let { data }: { data: PageData } = $props();
 
   let servings = $state(untrack(() => data.recipe.base_servings));
   let mode = $state<'classic' | 'stepper'>('classic');
-  let imageUrl = $state(untrack(() => data.recipe.image_url));
+  let imageUrl = $state(untrack(() => data.imageUrl));
   let selectedVersionId = $state(untrack(() => data.recipe.id));
 
   let recipe = $derived(data.recipe);
@@ -39,9 +41,9 @@
     window.location.href = `/recipe/${versionId}`;
   }
 
-  async function deleteRecipe() {
+    async function deleteRecipe() {
     const result = await Swal.fire({
-      title: '⚠️ Rezept löschen?',
+      title: 'Rezept löschen?',
       text: `Möchtest du "${recipe.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
       icon: 'warning',
       showCancelButton: true,
@@ -90,7 +92,7 @@
 </svelte:head>
 
 <main class="container detail">
-  <a href="/" class="back-link">← Rezepte</a>
+  <a href="/" class="back-link"><Icon name="back" size={16} /> Rezepte</a>
 
   {#if imageUrl}
     <div class="hero">
@@ -100,7 +102,7 @@
 
   {#if recipe.category}
     <a class="catchip-top" href="/category/{recipe.category.slug}">
-      {recipe.category.icon ?? ''} {recipe.category.name}
+      <CategoryIcon icon={recipe.category.icon} size={16} /> {recipe.category.name}
     </a>
   {/if}
 
@@ -155,7 +157,7 @@
       role="tab"
       aria-selected={mode === 'classic'}
     >
-      📖 Klassisch
+      <Icon name="book" size={18} /> Klassisch
     </button>
     <button
       class="btn"
@@ -164,25 +166,25 @@
       role="tab"
       aria-selected={mode === 'stepper'}
     >
-      👆 Schritt für Schritt
+      <Icon name="list" size={18} /> Schritt für Schritt
     </button>
   </div>
 
   {#if mode === 'classic'}
     <section class="block">
-      <h2>🛒 Zutaten</h2>
+      <h2 class="block-h"><Icon name="cart" size={20} /> Zutaten</h2>
       <IngredientList ingredients={allIngredients} {factor} />
     </section>
 
     <section class="block">
-      <h2>👩‍🍳 Zubereitung</h2>
+      <h2 class="block-h"><Icon name="chef" size={20} /> Zubereitung</h2>
       <ol class="steps">
         {#each recipe.steps as step (step.id)}
           <li class="step">
             <div class="step-head">
               <span class="stepnum">{step.order}</span>
               {#if step.duration_sec}
-                <span class="timer-badge">⏱ {formatDuration(step.duration_sec)}</span>
+                <span class="timer-badge"><Icon name="timer" size={14} /> {formatDuration(step.duration_sec)}</span>
               {/if}
             </div>
             {#if stepsIngredients(step.id).length}
@@ -273,6 +275,14 @@
   }
   .block h2 {
     font-size: 1.15rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .block-h {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .steps {
     list-style: none;
@@ -314,6 +324,9 @@
     padding: 3px 10px;
     border-radius: 999px;
     border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .step-ings {
     margin: 0 0 8px;

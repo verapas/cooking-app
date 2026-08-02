@@ -3,6 +3,8 @@
   import { page } from '$app/state';
   import { closeDrawer, nav } from '$lib/nav.svelte';
   import { auth, logout, refreshAuth } from '$lib/auth.svelte';
+  import Icon from './Icon.svelte';
+  import CategoryIcon from './CategoryIcon.svelte';
   import type { Category } from '$lib/types';
 
   let { categories }: { categories: Category[] } = $props();
@@ -24,19 +26,19 @@
     aria-label="Navigation schließen"
     onclick={closeDrawer}
   ></button>
-  <aside class="drawer" aria-label="Navigation">
+  <aside class="drawer" class:closing={!nav.open} aria-label="Navigation">
     <div class="drawer-head">
-      <span class="brand">🍳 Koch-App</span>
-      <button class="x" aria-label="Schließen" onclick={closeDrawer}>✕</button>
+      <span class="brand"><span class="brand-ic"><Icon name="pot" size={20} /></span> Koch-App</span>
+      <button class="x" aria-label="Schließen" onclick={closeDrawer}><Icon name="close" size={20} /></button>
     </div>
 
     <nav class="drawer-nav">
       <a class="item" href="/" class:active={page.url.pathname === '/'}>
-        <span class="ic">🏠</span> Alle Rezepte
+        <span class="ic"><Icon name="home" size={20} /></span> Alle Rezepte
       </a>
 
       <a class="item" href="/favorites" class:active={page.url.pathname === '/favorites'}>
-        <span class="ic">⭐</span> Favoriten
+        <span class="ic"><Icon name="star" size={20} /></span> Favoriten
       </a>
 
       <p class="grouplabel">Kategorien</p>
@@ -47,24 +49,24 @@
             href="/category/{c.slug}"
             class:active={isCatActive(c.slug)}
           >
-            <span class="ic">{c.icon ?? '•'}</span>{c.name}
+            <span class="ic"><CategoryIcon icon={c.icon} size={20} /></span>{c.name}
           </a>
         {/each}
       </div>
 
       <div class="divider"></div>
       <a class="item" href="/search" class:active={page.url.pathname === '/search'}>
-        <span class="ic">🔍</span> Suche
+        <span class="ic"><Icon name="search" size={20} /></span> Suche
       </a>
 
       <div class="divider"></div>
       {#if auth.isLoggedIn}
-        <button class="item" onclick={async () => { await logout(); closeDrawer(); }}>
-          <span class="ic">🚪</span> Abmelden
-        </button>
+        <a class="item" href="/login" class:active={page.url.pathname === '/login'}>
+          <span class="ic"><Icon name="logout" size={20} /></span> Abmelden
+        </a>
       {:else}
         <a class="item" href="/login" class:active={page.url.pathname === '/login'}>
-          <span class="ic">🔐</span> Einloggen (Admin)
+          <span class="ic"><Icon name="lock" size={20} /></span> Einloggen (Admin)
         </a>
       {/if}
     </nav>
@@ -88,7 +90,7 @@
     left: 0;
     bottom: 0;
     z-index: 100;
-    width: min(82vw, 320px);
+    width: min(76vw, 280px);
     background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
@@ -98,12 +100,23 @@
     overflow-y: auto;
     animation: slidein 0.22s ease;
   }
+  .drawer.closing {
+    animation: slideout 0.22s ease forwards;
+  }
   @keyframes slidein {
     from {
       transform: translateX(-100%);
     }
     to {
       transform: translateX(0);
+    }
+  }
+  @keyframes slideout {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
     }
   }
   @keyframes fade {
@@ -124,15 +137,27 @@
   .brand {
     font-weight: 700;
     font-size: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand-ic {
+    color: var(--accent);
+    display: inline-flex;
   }
   .x {
     background: none;
     border: none;
     color: var(--text-dim);
-    font-size: 1.2rem;
     cursor: pointer;
     min-width: var(--tap);
     min-height: var(--tap);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .x:hover {
+    color: var(--text);
   }
   .drawer-nav {
     padding: 8px;
@@ -151,9 +176,10 @@
     font-size: 1rem;
   }
   .item .ic {
-    font-size: 1.1rem;
-    width: 1.4em;
-    text-align: center;
+    width: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .item.active {
     background: var(--surface-2);
