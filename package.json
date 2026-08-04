@@ -36,6 +36,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "mysql2": "^3.23.2",
+    "openai": "^7.3.0",
     "sweetalert2": "^11.26.25"
   }
 }

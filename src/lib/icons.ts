@@ -15,6 +15,8 @@ export const icons = {
   menu: '<path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   lock: '<rect x="4.5" y="11" width="15" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  sparkles: '<path d="M12 3l1.8 4.8L18.5 9.5 13.8 11.2 12 16l-1.8-4.8L5.5 9.5l4.7-1.7z"/><path d="M18.5 14.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
 
   // Richtung & Status
   back: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
@@ -24,6 +26,7 @@ export const icons = {
   pause: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
   restart: '<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 3v4h4"/>',
   warning: '<path d="M12 3 22 20 2 20z"/><path d="M12 9v5"/><path d="M12 17.5h.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>',
   hourglass: '<path d="M6 3h12"/><path d="M6 21h12"/><path d="M6 3c0 4 3.5 5 6 7 2.5-2 6-3 6-7"/><path d="M6 21c0-4 3.5-5 6-7 2.5 2 6 3 6 7"/>',
 
   // Medien & Eingaben

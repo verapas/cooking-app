@@ -41,6 +41,16 @@
         <span class="ic"><Icon name="star" size={20} /></span> Favoriten
       </a>
 
+      {#if auth.isLoggedIn}
+        <a
+          class="item item-accent"
+          href="/chat"
+          class:active={page.url.pathname === '/chat'}
+        >
+          <span class="ic"><Icon name="sparkles" size={20} /></span> Neues Rezept (KI)
+        </a>
+      {/if}
+
       <p class="grouplabel">Kategorien</p>
       <div class="catlist">
         {#each categories as c (c.id)}
@@ -60,6 +70,11 @@
       </a>
 
       <div class="divider"></div>
+      {#if auth.isLoggedIn}
+        <a class="item" href="/settings" class:active={page.url.pathname === '/settings'}>
+          <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
+        </a>
+      {/if}
       {#if auth.isLoggedIn}
         <a class="item" href="/login" class:active={page.url.pathname === '/login'}>
           <span class="ic"><Icon name="logout" size={20} /></span> Abmelden
@@ -185,6 +200,14 @@
     background: var(--surface-2);
     color: var(--accent);
     font-weight: 600;
+  }
+  .item-accent {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .item-accent .ic {
+    color: var(--accent);
   }
   .grouplabel {
     font-size: 0.72rem;

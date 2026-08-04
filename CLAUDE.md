@@ -19,23 +19,22 @@ UI komplett auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 
 ```bash
 pnpm install     # einmalig (canvas muss gebaut werden → s. Gotchas)
-pnpm dev         # Dev-Server auf http://localhost:5173 (braucht externe MariaDB!)
+pnpm dev         # Dev-Server auf http://localhost:5173
 pnpm build       # Produktions-Build nach build/ → dann `node build`
 pnpm check       # Typecheck (svelte-kit sync && svelte-check)
 
 # Docker (lokaler Fullstack-Test: mariadb + migrator + app):
 pnpm docker:dev    # Image bauen + Stack starten (detached). App auf :3000
-pnpm docker:logs   # Live-Logs aller Services (Strg+C zum Beenden, stoppt nichts)
+pnpm docker:logs   # Live-Logs aller Services (Strg+C beendet nur die Anzeige)
 pnpm docker:down   # Stack stoppen, Volumes bleiben erhalten (Daten überleben)
 pnpm docker:reset  # Stack stopfen + DB-Volumes löschen → nächster Start resettet
 ```
 
-**Wichtig zu `pnpm dev`**: Dieser Start läuft OHNE MariaDB-Container und wird beim
-ersten DB-Zugriff scheitern. Für lokale Entwicklung entweder (a) eine externe
-MariaDB-Instanz laufen lassen (Env-Vars `DB_HOST` etc. setzen) oder (b) den
-vollen Stack via `pnpm docker:dev` starten und dann Code-Änderungen an der App
-per `pnpm dev` testen (die App verbindet sich dann gegen die dockerisierte DB,
-dafür `DB_HOST=127.0.0.1` und in `compose.dev.yaml` den Port 3306 freigeben).
+**`pnpm dev` braucht eine erreichbare MariaDB** unter `127.0.0.1:3306`.
+Dafür einmal `pnpm docker:dev` starten (Port ist in `compose.dev.yaml`
+freigegeben), dann den App-Container stoppen (`docker stop koch-app-dev`)
+und `pnpm dev` laufen lassen. Login-Daten aus `.env` (`ADMIN_PASSWORD`),
+nicht aus der Compose.
 
 ## Architektur
 
@@ -45,9 +44,12 @@ src/lib/server/        # NUR server-seitig (nie vom Client importieren!)
   queries.ts           # alle Query-/Mutations-Funktionen (alle async)
   seed.ts              # Beispiel-Kategorien + -Rezepte (läuft nur, wenn DB leer)
   session.ts           # Session-Validation Helper
+  settings.ts          # Key/Value-Settings (settings-Tabelle) + KI-Komfort-Helper
+  ai.ts                # OpenRouter-Integration: Streaming + Finalize (RecipeInput)
 src/lib/components/    # UI-Komponenten
   PWAInstall.svelte    # PWA-Install-Button
   OfflineIndicator.svelte # Online/Offline-Statusanzeige
+  ChatPanel.svelte     # KI-Chat (Streaming, Finalize-Vorschau, Speichern)
 src/lib/portion.ts     # Portionen-Skalierung + Mengen-/Dauer-Formatierung
 src/lib/sound.ts       # Web-Audio-Bleep + Vibration (für den Stepper-Timer)
 src/lib/wakeLock.ts    # Screen Wake Lock (Bildschirm beim Kochen anlassen)
@@ -60,7 +62,9 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /favorites/          # Favoriten-Seite
   /offline/            # Offline-Fallback-Seite
   /login/              # Login-Seite
-  /recipe/[id]/        # Rezept-Detail
+  /chat/               # KI-Chat (?recipe=<id> = improve-Modus)
+  /settings/           # KI-Einstellungen (OpenRouter API-Key + Modell)
+  /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>)
   /recipe/[id]/edit/   # Rezept-Bearbeitung
   /api/                # REST-API-Endpunkte
   /images/             # Bild-Auslieferung
@@ -98,6 +102,10 @@ vite.config.ts         # Vite + PWA-Konfiguration
   (z. B. "Schnelle Version", "Vegetarisch").
 - **Favoriten**: `recipes.is_favorite` (0/1, wird per API getoggelt).
 - **Auth-Tabellen**: `users` (username, password_hash), `sessions` (id, created_at, 7 Tage Ablauf).
+- **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
+  für App-Konfiguration. Aktuell: `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL`
+  (z. B. `glm-5.2`) und `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`).
+  Gelesen/geschrieben via `src/lib/server/settings.ts`.
 
 ## Bild-Upload & Login
 
@@ -108,6 +116,36 @@ vite.config.ts         # Vite + PWA-Konfiguration
   `./data/images` lokal), setzt `image_url`, löscht das alte Bild.
   Validierung: JPG/PNG/WebP/GIF, max. 20 MB.
 - Bilder ausliefern: `GET /images/[file]`.
+
+## KI-Chat (provider-unabhängig)
+
+KI-Assistent zum **Planen neuer Rezepte** (Nav „Neues Rezept (KI)" → `/chat`) und
+zum **Verbessern bestehender Rezepte** (Button auf der Detailseite → `/chat?recipe=<id>`).
+Die Anbindung ist **provider-unabhängig**: jeder OpenAI-kompatible Anbieter funktioniert
+(z. B. **z.ai direkt**, OpenRouter, OpenAI, lokales LM Studio). Antworten werden
+**gestreamt** (SSE).
+
+- **Konfiguration** (drei Werte, in der App unter `/settings`, in der `settings`-Tabelle):
+  - `AI_API_KEY` — der Provider-API-Key (geheim, nie an den Client; `GET /api/settings`
+    liefert nur `has_key` + maskierten Hint).
+  - `AI_MODEL` — Modell-String des Anbieters, z. B. `glm-5.2` (Default) oder `glm-4.6`.
+  - `AI_BASE_URL` — OpenAI-kompatible Base-URL, Default `https://api.z.ai/api/paas/v4`.
+  Die Settings-Seite bietet Vorlagen (Presets) für gängige Anbieter.
+- **Zweistufige Interaktion**: (1) Chat-Phase streamt normalen Text (`POST /api/chat`).
+  (2) „Rezept aus Chat erstellen" ruft `POST /api/chat/finalize` auf → ein nicht-streamender
+  Aufruf mit `response_format: json_object` liefert ein validiertes `RecipeInput`.
+- **Speichern über die bestehenden REST-Endpunkte** (kein neues Speicher-Handling):
+  - Neues Rezept → `POST /api/recipes`
+  - Original überschreiben → `PUT /api/recipes/[id]`
+  - Neue Version → `POST /api/recipes` mit `parent_recipe_id` + `version_name`
+  `validateRecipeInput` in `ai.ts` prüft/normalisiert das KI-JSON vor dem Speichern.
+- **Verlauf nicht persistiert**: Der Chat-Verlauf lebt nur im Client-State (`ChatPanel.svelte`).
+  Nur das fertige Rezept wird gespeichert.
+- **Auth**: `POST /api/chat*` und `PUT /api/settings` sind durch `hooks.server.ts`
+  automatisch session-geschützt (POST/PUT unter `/api/`). `/chat` und `/settings` sind als
+  reguläre Seiten hinter dem Login. Keine Hook-Änderung nötig.
+- **Abhängigkeit**: `openai` (npm). Da jeder Provider OpenAI-kompatibel ist, reicht in
+  `src/lib/server/ai.ts` ein Austausch von `baseURL` (aus den Settings).
 
 ## Seed ändern / Kategorien & Rezepte anpassen
 
@@ -172,6 +210,12 @@ pnpm docker:dev     # beim nächsten Start wird frisch geseeedet
 
 ### Bilder
 - `GET /images/[file]` - Bild ausliefern (offen)
+
+### KI-Chat (provider-unabhängig)
+- `POST /api/chat` - Streaming-Chat (SSE, `data: {"delta"}`/`data: [DONE]`); Body `{ messages, mode, recipeId? }` (session-geschützt)
+- `POST /api/chat/finalize` - Liefert validiertes `RecipeInput`-JSON aus dem Chat-Verlauf (session-geschützt)
+- `GET /api/settings` - KI-Status (Key **maskiert**, nie im Klartext; `has_key`, `ai_model`, `ai_base_url`) (session-geschützt)
+- `PUT /api/settings` - Konfiguration setzen; Body `{ ai_api_key?, ai_model?, ai_base_url? }` (session-geschützt)
 
 ## Deployment (Proxmox)
 

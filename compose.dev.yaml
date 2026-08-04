@@ -30,11 +30,12 @@ services:
       MARIADB_PASSWORD: devdbpw
     volumes:
       - koch-db-dev:/var/lib/mysql
-    # Kein Port-Publishing in Dev nötig — die App spricht mariadb über das
-    # interne Compose-Netzwerk an. Falls du mit einem DB-Client (DBeaver
-    # etc.) auf die DB willst, die nächste Zeile einkommentieren:
-    # ports:
-    #   - "127.0.0.1:3306:3306"
+    # Port nach außen freigeben, damit der Vite-Dev-Server (pnpm dev, der
+    # NICHT im Docker läuft) per localhost:3306 auf die DB zugreifen kann.
+    # Auch nützlich für DB-Clients wie DBeaver/HeidiSQL. Nur Loopback —
+    # nie ohne Reverse Proxy ans Internet!
+    ports:
+      - "127.0.0.1:3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

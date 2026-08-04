@@ -10,6 +10,7 @@
   import type { RecipeVersion } from '$lib/types';
   import Swal from 'sweetalert2';
   import Icon from '$lib/components/Icon.svelte';
+  import { auth } from '$lib/auth.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -132,6 +133,16 @@
     </div>
 
     <div class="actions-right">
+      {#if auth.isLoggedIn}
+        <a
+          href="/chat?recipe={recipe.id}"
+          class="btn-icon-small btn-ai"
+          aria-label="Mit KI verbessern oder neue Version"
+          title="Mit KI verbessern / neue Version"
+        >
+          <Icon name="sparkles" size={18} />
+        </a>
+      {/if}
       <a href="/recipe/{recipe.id}/edit" class="btn-icon-small" aria-label="Bearbeiten">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -392,5 +403,15 @@
 
   .btn-icon-small.btn-danger:hover {
     border-color: var(--danger);
+  }
+
+  .btn-icon-small.btn-ai {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  }
+
+  .btn-icon-small.btn-ai:hover {
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
   }
 </style>

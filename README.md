@@ -18,6 +18,10 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - ⭐ **Favoriten**: Rezepte markieren und gesammelt abrufen
 - 🔐 **Login**: Session-basierter Admin-Zugang, Bilder/Rezepte geschützt
 - 🖼️ **Bild-Upload**: pro Rezept ein Bild (JPG/PNG/WebP/GIF, bis 20 MB)
+- ✨ **KI-Assistent**: Rezepte per Chat mit einer KI planen und anlegen
+  (beliebiger OpenAI-kompatibler Anbieter, z. B. **z.ai**, OpenRouter,
+  OpenAI oder lokales LM Studio) – inkl. Verbessern/Neu-Versionieren
+  bestehender Rezepte. Streaming-Antworten, Anbieter frei konfigurierbar.
 
 ## Stack
 
@@ -27,6 +31,7 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - `@sveltejs/adapter-node` (Produktions-Build → `node build`)
 - `@vite-pwa/sveltekit` (PWA mit Service Worker)
 - `bcryptjs` (Passwort-Hashing), `sweetalert2` (Bestätigungsdialoge)
+- `openai` (OpenAI-kompatibles SDK für den KI-Assistenten, provider-unabhängig)
 - Package-Manager: **pnpm**
 
 ## Entwicklung
@@ -58,40 +63,22 @@ pnpm docker:reset  # stoppt Container + löscht DB-Volumes (frischer Seed)
 Nach `pnpm docker:dev` läuft die App auf **http://localhost:3000**.
 Login: `admin` / `devpassword` (fest in `compose.dev.yaml`).
 
-#### Architektur der Dev-Compose
+Der Stack besteht aus drei Services, die nacheinander starten:
+`mariadb` (DB) → `migrator` (Flyway, einmalig pro Start) → `app`.
+Details stehen direkt in `compose.dev.yaml`.
 
-Drei Services, die nacheinander starten:
+### Nur Vite-Dev (mit Hot-Reload)
 
-```
-mariadb  ──(healthy)──▶  migrator  ──(exit 0)──▶  app
-   │                        │                       │
-   │                        │                       ├─ Port 3000 (Loopback)
-   │                        │                       └─ Volume /data/images
-   │                        │
-   │                        ├─ Flyway-Container, läuft einmalig
-   │                        ├─ liest db/migration/V*__*.sql
-   │                        └─ beendet sich nach erfolgreicher Migration
-   │
-   └─ Volume koch-db-dev (persistente DB-Daten)
+Wenn du an der App entwickelst und schnelles Hot-Reload brauchst:
+
+```bash
+pnpm docker:dev        # Stack starten (brauchst du nur für die DB)
+docker stop koch-app-dev   # App-Container stopfen (Port 3000 frei)
+pnpm dev                   # Vite-Dev auf :5173 gegen die dockerisierte DB
 ```
 
-- **`mariadb`**: Datenbank. Daten liegen im Named Volume `koch-db-dev`
-  und überleben `pnpm docker:down`. Nur `pnpm docker:reset` löscht sie.
-- **`migrator`**: Flyway-Container. Startet bei jedem `up`, prüft, ob neue
-  Migrationen anstehen, wendet sie an und beendet sich (Exit 0). Bei
-  unverändertem Schema: „up to date, no migration necessary".
-- **`app`**: Die eigentliche Koch-App. Startet erst, wenn der Migrator
-  erfolgreich durchlief (`depends_on: service_completed_successfully`).
-
-#### Warum zwei Compose-Dateien?
-
-| Datei | Zweck | Image-Quelle |
-|---|---|---|
-| `compose.dev.yaml` (Root) | **Lokal**: Image wird aus dem Dockerfile gebaut (`build: .`) | lokal |
-| `deploy/compose.example.yaml` | **Produktion**: Image wird aus GHCR gezogen (`image: ghcr.io/OWNER/REPO`) | Registry |
-
-In der Produktion baut der Server **nicht** selbst — er zieht das fertige
-Image aus der Registry. Nur lokal (Dev) bauen wir direkt aus dem Source.
+Login dann mit den Daten aus `.env` (nicht aus der Compose), weil
+`seedUser()` beim Vite-Start den Admin neu anlegt.
 
 ## Produktion / Deployment
 
@@ -181,6 +168,15 @@ Login (außer `/api/auth/*`).
 | PUT | `/api/categories/:id` | Kategorie ändern |
 | DELETE | `/api/categories/:id` | Kategorie löschen |
 
+### KI-Assistent (provider-unabhängig)
+
+| Methode | Route | Beschreibung |
+|---|---|---|
+| POST | `/api/chat` | Streaming-Chat (SSE); Body `{ messages, mode, recipeId? }` |
+| POST | `/api/chat/finalize` | Liefert ein validiertes `RecipeInput`-JSON aus dem Verlauf |
+| GET | `/api/settings` | KI-Status (Key maskiert, Modell, Base-URL) |
+| PUT | `/api/settings` | Konfiguration setzen (Body `{ ai_api_key?, ai_model?, ai_base_url? }`) |
+
 ### Beispiel: Rezept anlegen
 
 Zuerst einloggen (Cookie speichern), dann:
@@ -211,10 +207,37 @@ curl -X POST http://localhost:3000/api/recipes \
   Fehlt der Wert, erscheint die Zutat in der globalen Zutatenliste.
 - `duration_sec` aktiviert den Timer für diesen Schritt.
 
+## KI-Assistent (Rezepte per Chat erstellen/verbessern)
+
+Der KI-Assistent erlaubt es, Rezepte in einem Chat zu planen und sie
+direkt in der App anzulegen. Es funktioniert **jeder OpenAI-kompatible
+Anbieter** (z. B. z.ai direkt, OpenRouter, OpenAI oder ein lokales
+LM Studio). Antworten werden gestreamt.
+
+**Einrichtung (einmalig):**
+1. Beim Anbieter deiner Wahl einen API-Key erzeugen (z. B. bei z.ai).
+2. In der App unter **Einstellungen** (Drawer → „Einstellungen") einen
+   Anbieter per Vorlage wählen oder Base-URL, Modell und Key manuell
+   eintragen. Alles wird **serverseitig** in der DB gespeichert
+   (`settings`-Tabelle) – der Key verlässt nie den Server und wird im
+   Client nur maskiert angezeigt.
+
+**Zwei Wege:**
+- **Neues Rezept** (Drawer → „Neues Rezept (KI)"): Chat starten, Rezept
+  planen, „Rezept aus Chat erstellen" → Vorschau prüfen → anlegen.
+- **Bestehendes verbessern** (✨-Button auf der Rezept-Detailseite):
+  Original **überschreiben** *oder* als **neue Version** speichern.
+
+Der Chat-Verlauf wird bewusst **nicht** gespeichert – nur das fertige
+Rezept am Ende.
+
 ## Datenmodell
 
 `categories` → `recipes` → `steps` + `ingredients` (Zutaten sind optional
 einem Schritt zugeordnet). Details zum Schema: `db/migration/V1__init_schema.sql`.
+Zusätzlich gibt es seit `V2__settings.sql` die Tabelle `settings` (`key`,
+`value`) für die KI-Konfiguration (API-Key, Modell, Base-URL — seit `V3`
+generisch für beliebige Anbieter).
 Schema-Änderungen immer als neue Flyway-Migration (`V2__…`, `V3__…`), nie
 manuell — Flyway checksummt die Dateien.
 

@@ -48,6 +48,39 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  /* Body scrollt nicht selbst — der Scroll-Container (.app-scroll) im
+     Layout übernimmt das, damit die Scrollbar unter dem Header beginnt. */
+  overflow: hidden;
+}
+
+/* === Globale Scrollbar-Styles (passend zum Dark-Theme) === */
+/* Greifen überall in der App (Overview, Chat, Settings, …). */
+* {
+  scrollbar-width: thin; /* Firefox: schmale Scrollbar */
+  scrollbar-color: var(--border) transparent; /* Firefox: Daumen/Track */
+}
+
+/* WebKit/Blink (Chrome, Edge, Safari): dezente, dünne Scrollbar. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box; /* Rand bleibt transparent → wirkt dünner */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body {
