@@ -71,6 +71,20 @@
     void releaseWakeLock();
   }
 
+  // Prop-Reset: wenn durationSec sich ändert (Schrittwechsel), Timer zurücksetzen
+  $effect(() => {
+    const d = durationSec;
+    stopInterval();
+    running = false;
+    finished = false;
+    remaining = d;
+    void releaseWakeLock();
+  });
+
+  function adjustTime(delta: number): void {
+    remaining = Math.max(0, remaining + delta);
+  }
+
   onDestroy(() => {
     stopInterval();
     void releaseWakeLock();
@@ -108,6 +122,15 @@
       {/if}
     {/if}
   </div>
+
+  {#if !finished}
+    <div class="adjust">
+      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300}>−5 Min</button>
+      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60}>−1 Min</button>
+      <button class="adj" onclick={() => adjustTime(60)}>+1 Min</button>
+      <button class="adj" onclick={() => adjustTime(300)}>+5 Min</button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -172,5 +195,28 @@
   .bigbtn {
     padding-left: 24px;
     padding-right: 24px;
+  }
+  .adjust {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  .adj {
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .adj:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .adj:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
 </style>

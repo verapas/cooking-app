@@ -81,7 +81,8 @@ function categoryHint(categories: Category[]): string {
  */
 export const RECIPE_JSON_SCHEMA_DESCRIPTION = `Ein JSON-Objekt mit genau dieser Form:
 {
-  "title": "string (Pflicht)",
+  "title": "string (Pflicht) — der vollständige Rezeptname",
+  "version_name": "string | null — NUR bei angepassten Varianten: ein KURZER, beschreibender Name für diese Version, der den Unterschied zum Original zusammenfasst (z. B. 'Mit Hüttenkäse', 'Vollkorn', 'Schnelle Version', 'Vegetarisch'). Max. 5 Wörter. Nicht der volle Titel!",
   "description": "string | null — kurze Beschreibung (optional)",
   "category_slug": "string | null — Slug einer vorhandenen Kategorie (optional)",
   "base_servings": "number — Standard-Portionen, z. B. 2 (optional, default 2)",
@@ -155,20 +156,50 @@ Verhalte dich natürlich:
 Wenn die Person zufrieden ist, wird sie das Rezept separat finalisieren lassen — dann lieferst du strukturiertes JSON. Im Chat-Verlauf bleibst du beim normalen Gesprächsfluss.`;
 }
 
-/** System-Prompt für die Finalize-Phase: erzwingt das Rezept-JSON. */
-function finalizeSystemPrompt(categories: Category[]): string {
-  return `Du bist ein Rezept-Generator in einer deutschen Rezept-App. Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt aus — keinen Erklärungstext, kein Markdown, keine Code-Einfassung.
+/**
+ * System-Prompt für die Finalize-Phase: erzwingt das Rezept-JSON.
+ * Wird immer verwendet — egal welcher Modus. Beim Modus 'improve' wird
+ * das bestehende Rezept zusätzlich als Anpassungs-Grundlage eingeblendet.
+ */
+function finalizeSystemPrompt(categories: Category[], contextRecipe?: RecipeWithDetails): string {
+  const contextBlock = contextRecipe
+    ? `\n\nDu erstellst eine ANGEPASSTE Variante dieses bestehenden Rezepts. Berücksichtige die Wünsche aus der Unterhaltung. Das Original als Grundlage:\n${describeRecipeForPrompt(contextRecipe)}`
+    : '';
+
+  return `Du bist ein Rezept-Generator in einer deutschen Rezept-App. Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt aus — keinen Erklärungstext, kein Markdown, keine Code-Einfassung. Antworte nicht im Gespräch, stelle keine Rückfragen, bestätige nichts. Liefere nur das fertige Rezept als JSON.
 
 ${RECIPE_JSON_SCHEMA_DESCRIPTION}
 
-${categoryHint(categories)}
+${categoryHint(categories)}${contextBlock}
 
 Regeln:
 - "quantity" MUSS numerisch sein (number), niemals ein String. Verwende 0 oder null für "nach Geschmack".
+- WICHTIG — Timer: JEDER Schritt, der eine klare Zeitspanne hat, MUSS eine "duration_sec" bekommen (in Sekunden, z. B. Kochen 600, Backen 1800, Ruhen 900, Andünsten 300). Schritte mit messbarer Dauer (kochen, backen, braten, ruhen lassen, marinieren, ziehen lassen, anbraten etc.) dürfen NICHT ohne "duration_sec" bleiben. Nur Schritte ohne feste Dauer (z. B. "Salz hinzufügen", "anrichten") dürfen null haben.
 - WICHTIG — Zutaten zu Schritten: JEDER Zutat MUSS ein "step_order"-Wert zugewiesen werden, der auf den "order"-Wert des Schritts verweist, in dem sie verwendet wird (z. B. "step_order": 1 → gehört zu Schritt mit "order": 1). Keine Zutat darf ohne "step_order" bleiben. Ordne jede Zutat dem Schritt zu, in dem sie tatsächlich gebraucht wird.
-- "step_order" und "quantity" müssen echten Zahlen (number) sein, keine Strings.
+- "step_order", "quantity" und "duration_sec" müssen echten Zahlen (number) sein, keine Strings.
+- "title" MUSS gesetzt sein (nicht leer) — der vollständige Name der Variante.
+${contextRecipe ? `- WICHTIG — Versionsname: Da du eine Variante eines bestehenden Rezepts erstellst, MUSS "version_name" gesetzt sein: ein KURZER, beschreibender Name (max. 5 Wörter), der den wesentlichen Unterschied zum Original zusammenfasst — z. B. "Mit Hüttenkäse", "Vollkorn", "Schnelle Version", "Vegan". NICHT "KI-Variante" und NICHT der volle Titel.` : ''}
 - Alle Texte auf Deutsch.
 - Liefere nur das JSON-Objekt, sonst nichts.`;
+}
+
+/** Beschreibt ein bestehendes Rezept als Textblock für den Finalize-Prompt. */
+function describeRecipeForPrompt(recipe: RecipeWithDetails): string {
+  const ings = recipe.ingredients
+    .map(
+      (i) =>
+        `  - ${i.name}${i.quantity ? ` ${i.quantity}${i.unit ? ' ' + i.unit : ''}` : ' (nach Geschmack)'}`
+    )
+    .join('\n');
+  const steps = recipe.steps
+    .map((s) => `  ${s.order}. ${s.instruction}${s.duration_sec ? ` (${s.duration_sec}s)` : ''}`)
+    .join('\n');
+  return `- Titel: ${recipe.title}
+- Portionen: ${recipe.base_servings}
+- Zutaten:
+${ings || '  (keine)'}
+- Schritte:
+${steps || '  (keine)'}`;
 }
 
 // =====================================================================
@@ -211,14 +242,24 @@ export async function* streamChat(
  * geparste RecipeInput. Wirft RecipeParseError, wenn die Antwort nicht
  * als Rezept-JSON interpretiert werden kann.
  *
- * Der bisherige Chat-Verlauf (messages) wird als Kontext mitgegeben,
- * damit die KI das besprochene Rezept produziert.
+ * Wichtig: Als System-Nachricht wird IMMER der strikte Finalize-Prompt
+ * verwendet („gib AUSSCHLIESSLICH JSON aus") — niemals der Chat-Prompt.
+ * Der Chat-Verlauf (messages) wird als Kontext mitgegeben, damit die KI
+ * das besprochene Rezept produziert; er enthält aber Gesprächs-Nachrichten
+ * (inkl. Bestätigungsfragen), die für die JSON-Erzeugung irrelevant sind.
+ * Deshalb der harte System-Anker, der jeden Gesprächsmodus übersteuert.
+ *
+ * @param messages   bisheriger Chat-Verlauf (user/assistant)
+ * @param categories verfügbare Kategorien (für category_slug)
+ * @param context    optionales Kontext-Rezept (Modus 'improve')
  */
 export async function finalizeRecipe(
   messages: ChatMessage[],
-  systemPrompt: string
+  categories: Category[],
+  contextRecipe?: RecipeWithDetails
 ): Promise<RecipeInput> {
   const { client, model } = await createClient();
+  const systemPrompt = finalizeSystemPrompt(categories, contextRecipe);
   const completion = await client.chat.completions.create({
     model,
     // JSON-Modus erzwingen — weitreichend unterstützt (auch GLM).
@@ -230,7 +271,9 @@ export async function finalizeRecipe(
         // Expliziter Anker: die KI soll jetzt das finale Rezept ausgeben.
         role: 'user',
         content:
-          'Bitte erstelle nun das fertige Rezept als JSON-Objekt gemäß dem Schema. Kein Erklärungstext.'
+          contextRecipe
+            ? `Erstelle nun — basierend auf unserer obigen Unterhaltung über „${contextRecipe.title}" — das fertige (angepasste) Rezept als JSON-Objekt gemäß dem Schema. Kein Erklärungstext, kein Markdown.`
+            : 'Bitte erstelle nun das fertige Rezept als JSON-Objekt gemäß dem Schema. Kein Erklärungstext, kein Markdown.'
       }
     ]
   });
@@ -284,6 +327,9 @@ export function validateRecipeInput(raw: unknown): RecipeInput {
   }
   if (typeof obj.source === 'string') {
     recipe.source = obj.source.trim() || null;
+  }
+  if (typeof obj.version_name === 'string' && obj.version_name.trim()) {
+    recipe.version_name = obj.version_name.trim().slice(0, 80);
   }
 
   if (Array.isArray(obj.steps)) {

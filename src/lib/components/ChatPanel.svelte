@@ -42,7 +42,7 @@
   // --- Finalize / Vorschau / Speichern ---
   let finalizing = $state(false);
   let preview = $state<RecipeInput | null>(null);
-  let versionName = $state('KI-Variante');
+  let versionName = $state('');
   let saving = $state(false);
   let saveError = $state('');
   let savedId = $state<number | null>(null);
@@ -200,9 +200,15 @@
         throw new Error(data.error || `Fehler (${res.status}).`);
       }
       preview = data.recipe as RecipeInput;
-      // Versionsnamen sinnvoll vorbelegen.
-      if (mode === 'improve' && (!versionName || versionName === 'KI-Variante')) {
-        versionName = `KI-Variante von „${contextTitle || 'Rezept'}"`.slice(0, 60);
+      // Versionsname: bevorzugt den Vorschlag der KI nutzen (z. B.
+      // "Mit Hüttenkäse"), sonst erst den Titel, dann ein Fallback.
+      // So steht im Dropdown etwas Aussagekräftiges statt "KI-Variante".
+      if (mode === 'improve') {
+        versionName =
+          preview.version_name ||
+          preview.title ||
+          contextTitle ||
+          'Variante';
       }
     } catch (err) {
       errorMsg = err instanceof Error ? err.message : 'Finalisieren fehlgeschlagen.';
@@ -275,7 +281,13 @@
       const body: RecipeInput = {
         ...preview,
         parent_recipe_id: parent,
-        version_name: versionName.trim() || 'KI-Variante'
+        // version_name aus dem (editierbaren) Feld, sonst aus dem KI-
+        // Vorschlag, sonst Titel, letzter Fallback "Variante".
+        version_name:
+          versionName.trim() ||
+          preview.version_name ||
+          preview.title ||
+          'Variante'
       };
       const res = await fetch('/api/recipes', {
         method: 'POST',

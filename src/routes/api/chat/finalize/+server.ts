@@ -4,8 +4,6 @@ import { getRecipe, listCategories } from '$lib/server/queries';
 import { getApiKey } from '$lib/server/settings';
 import {
   finalizeRecipe,
-  systemPromptNew,
-  systemPromptImprove,
   NoApiKeyError,
   RecipeParseError,
   type ChatMessage,
@@ -68,10 +66,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const mode: ChatMode = body.mode === 'improve' ? 'improve' : 'new';
 
-  // Finalize braucht denselben System-Prompt wie der Chat (damit die KI
-  // den besprochenen Kontext hat) — nur der User-Anker wird intern in
-  // finalizeRecipe ergänzt ("erstelle jetzt das JSON").
-  let systemPrompt: string;
+  // Kontext laden: Kategorien (immer) + Rezept (nur Modus 'improve').
+  // finalizeRecipe baut daraus selbst den strikten Finalize-Prompt
+  // („gib AUSSCHLIESSLICH JSON aus") — der Chat-Prompt hat hier nichts
+  // zu suchen, da er die KI ins Gesprächsverhalten drängt.
+  const categories = await listCategories();
+  let contextRecipe = undefined;
   if (mode === 'improve') {
     const recipeId =
       typeof body.recipeId === 'number'
@@ -82,12 +82,8 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!recipeId || !Number.isFinite(recipeId)) {
       throw error(422, 'Für Modus "improve" wird "recipeId" benötigt.');
     }
-    const recipe = await getRecipe(recipeId);
-    if (!recipe) throw error(404, 'Rezept nicht gefunden.');
-    systemPrompt = systemPromptImprove(recipe);
-  } else {
-    const categories = await listCategories();
-    systemPrompt = systemPromptNew(categories);
+    contextRecipe = await getRecipe(recipeId);
+    if (!contextRecipe) throw error(404, 'Rezept nicht gefunden.');
   }
 
   const apiKey = await getApiKey();
@@ -96,7 +92,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   try {
-    const recipe = await finalizeRecipe(messages, systemPrompt);
+    const recipe = await finalizeRecipe(messages, categories, contextRecipe);
     return json({ recipe });
   } catch (err) {
     if (err instanceof NoApiKeyError) {

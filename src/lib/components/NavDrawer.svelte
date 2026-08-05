@@ -43,7 +43,7 @@
 
       {#if auth.isLoggedIn}
         <a
-          class="item item-accent"
+          class="item"
           href="/chat"
           class:active={page.url.pathname === '/chat'}
         >

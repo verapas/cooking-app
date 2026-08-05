@@ -4,10 +4,8 @@
   import PortionControls from '$lib/components/PortionControls.svelte';
   import IngredientList from '$lib/components/IngredientList.svelte';
   import Stepper from '$lib/components/Stepper.svelte';
-  import ImageUpload from '$lib/components/ImageUpload.svelte';
   import CategoryIcon from '$lib/components/CategoryIcon.svelte';
   import { formatDuration, formatIngredient, scaleFactor } from '$lib/portion';
-  import type { RecipeVersion } from '$lib/types';
   import Swal from 'sweetalert2';
   import Icon from '$lib/components/Icon.svelte';
   import { auth } from '$lib/auth.svelte';
@@ -18,6 +16,20 @@
   let mode = $state<'classic' | 'stepper'>('classic');
   let imageUrl = $state(untrack(() => data.imageUrl));
   let selectedVersionId = $state(untrack(() => data.recipe.id));
+  let uploadBusy = $state(false);
+  let uploadError = $state('');
+  let versionDropdownOpen = $state(false);
+
+  // Dropdown schließen bei Klick außerhalb
+  $effect(() => {
+    if (!versionDropdownOpen) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.version-dropdown')) versionDropdownOpen = false;
+    }
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  });
 
   let recipe = $derived(data.recipe);
   let factor = $derived(scaleFactor(recipe.base_servings, servings));
@@ -40,6 +52,31 @@
   function changeVersion(versionId: number) {
     selectedVersionId = versionId;
     window.location.href = `/recipe/${versionId}`;
+  }
+
+  async function onImageChange(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    uploadBusy = true;
+    uploadError = '';
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch(`/api/recipes/${recipe.id}/image`, { method: 'POST', body: fd });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        uploadError = 'Upload fehlgeschlagen' + (data.error ? ': ' + data.error : '');
+      } else {
+        const data = (await res.json()) as { image_url: string };
+        imageUrl = data.image_url;
+      }
+    } catch {
+      uploadError = 'Verbindungsfehler.';
+    } finally {
+      uploadBusy = false;
+      input.value = '';
+    }
   }
 
     async function deleteRecipe() {
@@ -98,7 +135,21 @@
   {#if imageUrl}
     <div class="hero">
       <img src={imageUrl} alt={recipe.title} />
+      {#if auth.isLoggedIn}
+        <button class="hero-upload" onclick={() => document.getElementById('image-input')?.click()} disabled={uploadBusy} aria-label="Bild ändern">
+          <Icon name="camera" size={18} />
+        </button>
+      {/if}
     </div>
+    <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
+  {:else if auth.isLoggedIn}
+    <div class="hero hero-empty">
+      <Icon name="image" size={48} />
+      <button class="hero-upload" onclick={() => document.getElementById('image-input')?.click()} disabled={uploadBusy} aria-label="Bild hochladen">
+        <Icon name="camera" size={18} />
+      </button>
+    </div>
+    <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
   {/if}
 
   {#if recipe.category}
@@ -110,29 +161,41 @@
   <h1>{recipe.title}</h1>
   {#if recipe.description}<p class="desc">{recipe.description}</p>{/if}
 
-  {#if hasVersions}
-    <div class="version-selector">
-      <label for="version-select">Version:</label>
-      <select id="version-select" bind:value={selectedVersionId} onchange={(e) => {
-        const target = e.target as HTMLSelectElement;
-        changeVersion(Number(target.value));
-      }}>
-        {#each data.versions as version (version.id)}
-          <option value={version.id}>
-            {version.version_name || (version.is_main ? 'Standard' : `Variante #${version.id}`)}
-            {version.is_main ? ' (Haupt)' : ''}
-          </option>
-        {/each}
-      </select>
-    </div>
-  {/if}
+  {#if uploadError}<p class="err">{uploadError}</p>{/if}
 
-  <div class="image-actions">
-    <div class="upload-left">
-      <ImageUpload recipeId={recipe.id} onUploaded={(u) => (imageUrl = u)} />
-    </div>
+  <div class="toolbar">
+    {#if hasVersions}
+      <div class="version-dropdown">
+        <button class="version-trigger" onclick={() => versionDropdownOpen = !versionDropdownOpen}>
+          <Icon name="branch" size={18} />
+          <span>{data.versions.find(v => v.id === selectedVersionId)?.version_name || (data.versions.find(v => v.id === selectedVersionId)?.is_main ? 'Standard' : 'Variante')}</span>
+          <Icon name="chevron-down" size={14} class={versionDropdownOpen ? 'rotated' : ''} />
+        </button>
+        {#if versionDropdownOpen}
+          <div class="version-menu" role="listbox">
+            {#each data.versions as version (version.id)}
+              <button
+                class="version-option"
+                class:active={version.id === selectedVersionId}
+                role="option"
+                onclick={() => { changeVersion(version.id); versionDropdownOpen = false; }}
+              >
+                {version.version_name || (version.is_main ? 'Standard' : `Variante #${version.id}`)}
+                {#if version.is_main}<span class="tag">Haupt</span>{/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="actions-right">
+      <a href="/recipe/{recipe.id}/edit" class="btn-icon-small" aria-label="Bearbeiten">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+      </a>
       {#if auth.isLoggedIn}
         <a
           href="/chat?recipe={recipe.id}"
@@ -143,12 +206,6 @@
           <Icon name="sparkles" size={18} />
         </a>
       {/if}
-      <a href="/recipe/{recipe.id}/edit" class="btn-icon-small" aria-label="Bearbeiten">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-      </a>
       <button class="btn-icon-small btn-danger" onclick={deleteRecipe} aria-label="Löschen">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3,6 5,6 21,6"/>
@@ -222,12 +279,50 @@
     overflow: hidden;
     aspect-ratio: 16 / 10;
     background: var(--surface-2);
+    position: relative;
   }
   .hero img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+  .hero-upload {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    backdrop-filter: blur(4px);
+  }
+  .hero-upload:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+  }
+  .hero-upload:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .hero-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+  }
+  .hero-empty .hero-upload {
+    position: absolute;
+    top: 8px;
+    right: 8px;
   }
   .detail h1 {
     font-size: 1.7rem;
@@ -242,24 +337,82 @@
   .desc {
     color: var(--text-dim);
   }
-  .version-selector {
-    margin: 12px 0;
-    display: flex;
+  .version-trigger {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-  }
-  .version-selector label {
-    font-size: 0.9rem;
-    color: var(--text-dim);
-  }
-  .version-selector select {
-    padding: 6px 10px;
-    border-radius: var(--radius);
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
     font-size: 0.9rem;
-    min-width: 150px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-height: var(--tap);
+  }
+  .version-trigger:hover {
+    border-color: var(--accent);
+  }
+  .version-trigger :global(.rotated) {
+    transform: rotate(180deg);
+    transition: transform 0.2s ease;
+  }
+  .version-trigger :global(svg) {
+    transition: transform 0.2s ease;
+  }
+  .version-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 100%;
+    z-index: 50;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    animation: dropdownIn 0.15s ease;
+  }
+  @keyframes dropdownIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .version-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s ease;
+  }
+  .version-option:hover {
+    background: var(--surface-2);
+  }
+  .version-option.active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .version-option .tag {
+    margin-left: auto;
+    font-size: 0.7rem;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+  .version-option.active .tag {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
   }
   .meta {
     display: flex;
@@ -353,26 +506,28 @@
     margin: 0;
   }
 
-  .image-actions {
+  .toolbar {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    align-items: center;
     gap: 8px;
-    margin: 14px 0;
+    margin: 12px 0;
+    flex-wrap: wrap;
   }
-
-  .upload-left {
+  .version-dropdown {
+    position: relative;
     flex: 1;
-  }
-
-  .upload-left :global(.upload) {
-    margin: 0;
   }
 
   .actions-right {
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  .err {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin: 0 0 4px;
   }
 
   .btn-icon-small {
