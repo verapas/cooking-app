@@ -1,18 +1,13 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getCategoryBySlug, updateCategory, deleteCategory } from '$lib/server/queries';
-import { verifySession } from '$lib/server/session';
+import { updateCategory, deleteCategory } from '$lib/server/queries';
 import type { CategoryUpdateInput } from '$lib/types';
 
-export const PUT: RequestHandler = async ({ params, cookies, request }) => {
+// PUT /api/categories/[id]  (Schutz über Reverse Proxy, nicht auf App-Ebene)
+export const PUT: RequestHandler = async ({ params, request }) => {
   const id = Number(params.id);
   if (isNaN(id)) {
     throw error(400, 'Ungültige Kategorie-ID');
-  }
-
-  const session = cookies.get('session');
-  if (!session || !(await verifySession(session))) {
-    throw error(401, 'Unauthorized');
   }
 
   let body: CategoryUpdateInput;
@@ -30,15 +25,11 @@ export const PUT: RequestHandler = async ({ params, cookies, request }) => {
   return json({ ok: true });
 };
 
-export const DELETE: RequestHandler = async ({ params, cookies }) => {
+// DELETE /api/categories/[id]  (Schutz über Reverse Proxy, nicht auf App-Ebene)
+export const DELETE: RequestHandler = async ({ params }) => {
   const id = Number(params.id);
   if (isNaN(id)) {
     throw error(400, 'Ungültige Kategorie-ID');
-  }
-
-  const session = cookies.get('session');
-  if (!session || !(await verifySession(session))) {
-    throw error(401, 'Unauthorized');
   }
 
   const success = await deleteCategory(id);

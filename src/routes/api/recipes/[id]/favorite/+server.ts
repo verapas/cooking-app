@@ -1,17 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { toggleFavorite } from '$lib/server/queries';
-import { verifySession } from '$lib/server/session';
 
-export const POST: RequestHandler = async ({ params, cookies }) => {
+// POST /api/recipes/[id]/favorite  (Schutz über Reverse Proxy, nicht auf App-Ebene)
+export const POST: RequestHandler = async ({ params }) => {
   const id = Number(params.id);
   if (isNaN(id)) {
     throw error(400, 'Ungültige Rezept-ID');
-  }
-
-  const session = cookies.get('session');
-  if (!session || !(await verifySession(session))) {
-    throw error(401, 'Unauthorized');
   }
 
   const success = await toggleFavorite(id);

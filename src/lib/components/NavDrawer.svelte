@@ -2,17 +2,15 @@
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { closeDrawer, nav } from '$lib/nav.svelte';
-  import { auth, logout, refreshAuth } from '$lib/auth.svelte';
   import Icon from './Icon.svelte';
   import CategoryIcon from './CategoryIcon.svelte';
   import type { Category } from '$lib/types';
 
   let { categories }: { categories: Category[] } = $props();
 
-  // Nach jeder Navigation den Drawer schließen und Auth-Status prüfen.
+  // Nach jeder Navigation den Drawer schließen.
   afterNavigate(() => {
     closeDrawer();
-    refreshAuth();
   });
 
   function isCatActive(slug: string): boolean {
@@ -41,15 +39,13 @@
         <span class="ic"><Icon name="star" size={20} /></span> Favoriten
       </a>
 
-      {#if auth.isLoggedIn}
-        <a
-          class="item"
-          href="/chat"
-          class:active={page.url.pathname === '/chat'}
-        >
-          <span class="ic"><Icon name="sparkles" size={20} /></span> Neues Rezept (KI)
-        </a>
-      {/if}
+      <a
+        class="item"
+        href="/chat"
+        class:active={page.url.pathname === '/chat'}
+      >
+        <span class="ic"><Icon name="sparkles" size={20} /></span> Neues Rezept (KI)
+      </a>
 
       <p class="grouplabel">Kategorien</p>
       <div class="catlist">
@@ -70,20 +66,9 @@
       </a>
 
       <div class="divider"></div>
-      {#if auth.isLoggedIn}
-        <a class="item" href="/settings" class:active={page.url.pathname === '/settings'}>
-          <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
-        </a>
-      {/if}
-      {#if auth.isLoggedIn}
-        <a class="item" href="/login" class:active={page.url.pathname === '/login'}>
-          <span class="ic"><Icon name="logout" size={20} /></span> Abmelden
-        </a>
-      {:else}
-        <a class="item" href="/login" class:active={page.url.pathname === '/login'}>
-          <span class="ic"><Icon name="lock" size={20} /></span> Einloggen (Admin)
-        </a>
-      {/if}
+      <a class="item" href="/settings" class:active={page.url.pathname === '/settings'}>
+        <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
+      </a>
     </nav>
   </aside>
 {/if}

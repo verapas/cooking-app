@@ -11,7 +11,6 @@ UI komplett auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - **Flyway** (Schema-Migration via separatem Container beim Deploy, s. Docker-Abschnitt)
 - **adapter-node** (Produktions-Build → `node build`)
 - **@vite-pwa/sveltekit** (PWA mit Service Worker)
-- **bcryptjs** (Passwort-Hashing)
 - **sweetalert2** (Bestätigungsdialoge)
 - Package-Manager: **pnpm**
 
@@ -33,19 +32,16 @@ pnpm docker:reset  # Stack stopfen + DB-Volumes löschen → nächster Start res
 **`pnpm dev` braucht eine erreichbare MariaDB** unter `127.0.0.1:3306`.
 Dafür einmal `pnpm docker:dev` starten (Port ist in `compose.dev.yaml`
 freigegeben), dann den App-Container stoppen (`docker stop koch-app-dev`)
-und `pnpm dev` laufen lassen. Login-Daten aus `.env` (`ADMIN_PASSWORD`),
-nicht aus der Compose.
+und `pnpm dev` laufen lassen.
 
 ## Architektur
 
 ```
 src/lib/server/        # NUR server-seitig (nie vom Client importieren!)
-  db.ts                # mysql2-Pool (Singleton) + Auth-/Session-Helper (alle async)
+  db.ts                # mysql2-Pool (Singleton) + Date-Helper (alle async)
   queries.ts           # alle Query-/Mutations-Funktionen (alle async)
-  seed.ts              # Beispiel-Kategorien + -Rezepte (läuft nur, wenn DB leer)
-  session.ts           # Session-Validation Helper
   settings.ts          # Key/Value-Settings (settings-Tabelle) + KI-Komfort-Helper
-  ai.ts                # OpenRouter-Integration: Streaming + Finalize (RecipeInput)
+  ai.ts                # KI-Integration (provider-unabhängig): Streaming + Finalize
 src/lib/components/    # UI-Komponenten
   PWAInstall.svelte    # PWA-Install-Button
   OfflineIndicator.svelte # Online/Offline-Statusanzeige
@@ -53,7 +49,6 @@ src/lib/components/    # UI-Komponenten
 src/lib/portion.ts     # Portionen-Skalierung + Mengen-/Dauer-Formatierung
 src/lib/sound.ts       # Web-Audio-Bleep + Vibration (für den Stepper-Timer)
 src/lib/wakeLock.ts    # Screen Wake Lock (Bildschirm beim Kochen anlassen)
-src/lib/auth.svelte.ts # Client-Auth-State (Session-basiert)
 src/lib/nav.svelte.ts  # Drawer-Open-State (universal reactivity)
 src/lib/types.ts       # TypeScript-Typen für Rezept-Daten
 src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offline/)
@@ -61,14 +56,13 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   +page.server.ts      # Load-Funktionen (await Query-Calls)
   /favorites/          # Favoriten-Seite
   /offline/            # Offline-Fallback-Seite
-  /login/              # Login-Seite
   /chat/               # KI-Chat (?recipe=<id> = improve-Modus)
-  /settings/           # KI-Einstellungen (OpenRouter API-Key + Modell)
+  /settings/           # KI-Einstellungen (API-Key, Modell, Base-URL)
   /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>)
   /recipe/[id]/edit/   # Rezept-Bearbeitung
   /api/                # REST-API-Endpunkte
   /images/             # Bild-Auslieferung
-src/hooks.server.ts    # Seed beim Start + Session-Auth
+src/hooks.server.ts    # Pass-Through (kein App-Login mehr — Schutz via Reverse Proxy)
 db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — vom
                        # Flyway-Container beim Deploy eingelesen, nicht von der App
 vite.config.ts         # Vite + PWA-Konfiguration
@@ -83,9 +77,11 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Niemals `$lib/server/*` in Client-Komponenten importieren.
 - **Alle Query-/Auth-Funktionen sind async** (mysql2-Pool). Aufrufe in Load-Funktionen
   und API-Routen müssen `await` sein — sonst erhält man Promises statt Daten.
-- **Session-basierte Authentifizierung**: Alle Seiten (außer `/login`) und Schreib-APIs erfordern
-  eine gültige Session-Cookie. Login via `/api/auth/login` mit `ADMIN_USERNAME`/`ADMIN_PASSWORD`
-  aus `.env`. Sessions werden in MariaDB verwaltet und laufen nach 7 Tagen ab.
+- **Kein App-Login mehr**: Die App besitzt keine eigene Authentifizierung. Der
+  Zugriffsschutz liegt vollständig auf Infrastrukturebene (Reverse Proxy / VPN /
+  internes Netz) — der Container sollte nie direkt aus dem Internet erreichbar sein.
+  `hooks.server.ts` ist ein reiner Pass-Through; alle Schreib-APIs sind ohne
+  App-Level-Schutz. Das war eine bewusste Entscheidung.
 - **Schema-Änderungen NUR über Flyway** (`db/migration/V*__*.sql`). Nie manuell mit
   `ALTER TABLE` in `db.ts` — Flyway checksummt die Files und ein manueller Eingriff
   macht die History inkonsistent.
@@ -101,17 +97,16 @@ vite.config.ts         # Vite + PWA-Konfiguration
 - **Rezept-Versioning**: `recipes.parent_recipe_id` (→ Hauptrezept) + `recipes.version_name`
   (z. B. "Schnelle Version", "Vegetarisch").
 - **Favoriten**: `recipes.is_favorite` (0/1, wird per API getoggelt).
-- **Auth-Tabellen**: `users` (username, password_hash), `sessions` (id, created_at, 7 Tage Ablauf).
+- **Auth-Tabellen entfernt** (V4): `users`/`sessions` wurden mit `V4__drop_auth.sql`
+  gedroppt — die App hat kein eigenes Login mehr (Schutz via Reverse Proxy).
 - **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
   für App-Konfiguration. Aktuell: `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL`
   (z. B. `glm-5.2`) und `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`).
   Gelesen/geschrieben via `src/lib/server/settings.ts`.
 
-## Bild-Upload & Login
+## Bild-Upload
 
-- Login: `/login` (oder Drawer → „Einloggen"). Session-basiert mit `ADMIN_USERNAME`/`ADMIN_PASSWORD`
-  aus `.env`. Session-Prüfung via `GET /api/auth/verify` (Cookie-basiert).
-- Upload: `POST /api/recipes/[id]/image` (multipart, Feld `image`, session-geschützt).
+- Upload: `POST /api/recipes/[id]/image` (multipart, Feld `image`).
   Speichert nach `$IMAGES_DIR` (default `/data/images` im Container bzw.
   `./data/images` lokal), setzt `image_url`, löscht das alte Bild.
   Validierung: JPG/PNG/WebP/GIF, max. 20 MB.
@@ -141,19 +136,18 @@ Die Anbindung ist **provider-unabhängig**: jeder OpenAI-kompatible Anbieter fun
   `validateRecipeInput` in `ai.ts` prüft/normalisiert das KI-JSON vor dem Speichern.
 - **Verlauf nicht persistiert**: Der Chat-Verlauf lebt nur im Client-State (`ChatPanel.svelte`).
   Nur das fertige Rezept wird gespeichert.
-- **Auth**: `POST /api/chat*` und `PUT /api/settings` sind durch `hooks.server.ts`
-  automatisch session-geschützt (POST/PUT unter `/api/`). `/chat` und `/settings` sind als
-  reguläre Seiten hinter dem Login. Keine Hook-Änderung nötig.
 - **Abhängigkeit**: `openai` (npm). Da jeder Provider OpenAI-kompatibel ist, reicht in
   `src/lib/server/ai.ts` ein Austausch von `baseURL` (aus den Settings).
 
-## Seed ändern / Kategorien & Rezepte anpassen
+## Ersteinrichtung / leere Datenbank
 
-`src/lib/server/seed.ts` läuft **nur, wenn die DB noch keine Rezepte enthält**
-(`seedIfEmpty`). Um neue Demo-Daten zu erzwingen:
+Die App besitzt **keinen Seeder** mehr — die DB startet komplett leer.
+Kategorien und Rezepte legst du selbst an:
+- Kategorien: Drawer → „Einstellungen" (bzw. via `POST /api/categories`)
+- Rezepte: Drawer → „Neues Rezept (KI)" (per Chat) oder manuell
 ```bash
 pnpm docker:reset   # stoppt den Stack und löscht die MariaDB-Volumes
-pnpm docker:dev     # beim nächsten Start wird frisch geseeedet
+pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren)
 ```
 
 ## Gotchas (Stolpersteine)
@@ -175,47 +169,44 @@ pnpm docker:dev     # beim nächsten Start wird frisch geseeedet
   ggf. aufräumen. Hinweis: `netstat` zeigt unter Windows-Deutsch **„ABHÖREN"**, nicht
   „LISTENING" — beim Filtern beachten.
 - **Env-Variablen** (`.env`, nicht committen):
-  `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `DB_HOST` (default `localhost`),
-  `DB_PORT` (default `3306`), `DB_NAME` (default `cooking`), `DB_USER` (default `cooking`),
-  `DB_PASSWORD`, `IMAGES_DIR` (default `./data/images`). `$env/dynamic/private` liest
-  sie zur Runtime.
+  `DB_HOST` (default `localhost`), `DB_PORT` (default `3306`),
+  `DB_NAME` (default `cooking`), `DB_USER` (default `cooking`), `DB_PASSWORD`,
+  `IMAGES_DIR` (default `./data/images`). `$env/dynamic/private` liest sie zur Runtime.
 - **`Date.now()` / `Math.random()`** sind nur in Workflow-Skripten gesperrt — im
   normalen App-Code (server- wie client-seitig) frei nutzbar.
 
 ## API-Endpunkte
 
-### Authentifizierung
-- `POST /api/auth/login` - Login mit username/password (setzt Session-Cookie)
-- `POST /api/auth/logout` - Logout (löscht Session)
-- `GET /api/auth/verify` - Prüft ob Session gültig ist
+> Hinweis: Es gibt kein App-Level-Login mehr. Alle Endpunkte sind ungeschützt auf
+> App-Ebene — der Schutz liegt beim Reverse Proxy (s.o.).
 
 ### Kategorien
-- `GET /api/categories` - Alle Kategorien (offen)
-- `POST /api/categories` - Kategorie erstellen (session-geschützt)
-- `PUT /api/categories/[id]` - Kategorie bearbeiten (session-geschützt)
-- `DELETE /api/categories/[id]` - Kategorie löschen (session-geschützt)
+- `GET /api/categories` - Alle Kategorien
+- `POST /api/categories` - Kategorie erstellen
+- `PUT /api/categories/[id]` - Kategorie bearbeiten
+- `DELETE /api/categories/[id]` - Kategorie löschen
 
 ### Rezepte
-- `GET /api/recipes[?category_id=...&q=...]` - Rezepte suchen/listen (offen)
-- `POST /api/recipes` - Rezept erstellen (session-geschützt)
-- `GET /api/recipes/[id]` - Rezept-Detail (offen)
-- `PUT /api/recipes/[id]` - Rezept bearbeiten (session-geschützt)
-- `DELETE /api/recipes/[id]` - Rezept löschen (session-geschützt)
-- `GET /api/recipes/[id]/versions` - Alle Versionen eines Rezepts (offen)
-- `POST /api/recipes/[id]/favorite` - Favorit-Status umschalten (session-geschützt)
-- `POST /api/recipes/[id]/image` - Bild hochladen (session-geschützt, multipart)
+- `GET /api/recipes[?category_id=...&q=...]` - Rezepte suchen/listen
+- `POST /api/recipes` - Rezept erstellen
+- `GET /api/recipes/[id]` - Rezept-Detail
+- `PUT /api/recipes/[id]` - Rezept bearbeiten
+- `DELETE /api/recipes/[id]` - Rezept löschen
+- `GET /api/recipes/[id]/versions` - Alle Versionen eines Rezepts
+- `POST /api/recipes/[id]/favorite` - Favorit-Status umschalten
+- `POST /api/recipes/[id]/image` - Bild hochladen (multipart)
 
 ### Favoriten
-- `GET /api/favorites` - Alle favorisierten Rezepte (offen)
+- `GET /api/favorites` - Alle favorisierten Rezepte
 
 ### Bilder
-- `GET /images/[file]` - Bild ausliefern (offen)
+- `GET /images/[file]` - Bild ausliefern
 
 ### KI-Chat (provider-unabhängig)
-- `POST /api/chat` - Streaming-Chat (SSE, `data: {"delta"}`/`data: [DONE]`); Body `{ messages, mode, recipeId? }` (session-geschützt)
-- `POST /api/chat/finalize` - Liefert validiertes `RecipeInput`-JSON aus dem Chat-Verlauf (session-geschützt)
-- `GET /api/settings` - KI-Status (Key **maskiert**, nie im Klartext; `has_key`, `ai_model`, `ai_base_url`) (session-geschützt)
-- `PUT /api/settings` - Konfiguration setzen; Body `{ ai_api_key?, ai_model?, ai_base_url? }` (session-geschützt)
+- `POST /api/chat` - Streaming-Chat (SSE, `data: {"delta"}`/`data: [DONE]`); Body `{ messages, mode, recipeId? }`
+- `POST /api/chat/finalize` - Liefert validiertes `RecipeInput`-JSON aus dem Chat-Verlauf
+- `GET /api/settings` - KI-Status (Key **maskiert**, nie im Klartext; `has_key`, `ai_model`, `ai_base_url`)
+- `PUT /api/settings` - Konfiguration setzen; Body `{ ai_api_key?, ai_model?, ai_base_url? }`
 
 ## Deployment (Proxmox)
 

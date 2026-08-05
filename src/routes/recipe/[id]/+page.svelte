@@ -8,7 +8,6 @@
   import { formatDuration, formatIngredient, scaleFactor } from '$lib/portion';
   import Swal from 'sweetalert2';
   import Icon from '$lib/components/Icon.svelte';
-  import { auth } from '$lib/auth.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -135,14 +134,12 @@
   {#if imageUrl}
     <div class="hero">
       <img src={imageUrl} alt={recipe.title} />
-      {#if auth.isLoggedIn}
-        <button class="hero-upload" onclick={() => document.getElementById('image-input')?.click()} disabled={uploadBusy} aria-label="Bild ändern">
-          <Icon name="camera" size={18} />
-        </button>
-      {/if}
+      <button class="hero-upload" onclick={() => document.getElementById('image-input')?.click()} disabled={uploadBusy} aria-label="Bild ändern">
+        <Icon name="camera" size={18} />
+      </button>
     </div>
     <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
-  {:else if auth.isLoggedIn}
+  {:else}
     <div class="hero hero-empty">
       <Icon name="image" size={48} />
       <button class="hero-upload" onclick={() => document.getElementById('image-input')?.click()} disabled={uploadBusy} aria-label="Bild hochladen">
@@ -196,16 +193,14 @@
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
       </a>
-      {#if auth.isLoggedIn}
-        <a
-          href="/chat?recipe={recipe.id}"
-          class="btn-icon-small btn-ai"
-          aria-label="Mit KI verbessern oder neue Version"
-          title="Mit KI verbessern / neue Version"
-        >
-          <Icon name="sparkles" size={18} />
-        </a>
-      {/if}
+      <a
+        href="/chat?recipe={recipe.id}"
+        class="btn-icon-small btn-ai"
+        aria-label="Mit KI verbessern oder neue Version"
+        title="Mit KI verbessern / neue Version"
+      >
+        <Icon name="sparkles" size={18} />
+      </a>
       <button class="btn-icon-small btn-danger" onclick={deleteRecipe} aria-label="Löschen">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3,6 5,6 21,6"/>

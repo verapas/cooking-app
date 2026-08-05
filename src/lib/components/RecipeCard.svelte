@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { RecipeListItem } from '$lib/types';
-  import { auth } from '$lib/auth.svelte';
   import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
 
@@ -55,16 +54,14 @@
     {:else}
       <div class="thumb-icon" aria-hidden="true"><Icon name="plate" size={56} /></div>
     {/if}
-    {#if auth.isLoggedIn}
-      <button
-        class="fav-btn"
-        class:fav-active={isFavorite}
-        aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
-        onclick={toggleFavorite}
-      >
-        <Icon name="star" size={18} filled={isFavorite} />
-      </button>
-    {/if}
+    <button
+      class="fav-btn"
+      class:fav-active={isFavorite}
+      aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+      onclick={toggleFavorite}
+    >
+      <Icon name="star" size={18} filled={isFavorite} />
+    </button>
   </div>
   <div class="body">
     {#if recipe.category_name}

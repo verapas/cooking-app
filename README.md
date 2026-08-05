@@ -16,7 +16,6 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - 🔢 **Portionen-Umschalter**: alle Mengen skalieren live mit
 - 🔄 **Rezept-Versionen**: Varianten eines Rezepts (z. B. „Schnelle Version")
 - ⭐ **Favoriten**: Rezepte markieren und gesammelt abrufen
-- 🔐 **Login**: Session-basierter Admin-Zugang, Bilder/Rezepte geschützt
 - 🖼️ **Bild-Upload**: pro Rezept ein Bild (JPG/PNG/WebP/GIF, bis 20 MB)
 - ✨ **KI-Assistent**: Rezepte per Chat mit einer KI planen und anlegen
   (beliebiger OpenAI-kompatibler Anbieter, z. B. **z.ai**, OpenRouter,
@@ -30,7 +29,7 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - **Flyway** für Schema-Migrationen (separater Container beim Deploy)
 - `@sveltejs/adapter-node` (Produktions-Build → `node build`)
 - `@vite-pwa/sveltekit` (PWA mit Service Worker)
-- `bcryptjs` (Passwort-Hashing), `sweetalert2` (Bestätigungsdialoge)
+- `sweetalert2` (Bestätigungsdialoge)
 - `openai` (OpenAI-kompatibles SDK für den KI-Assistenten, provider-unabhängig)
 - Package-Manager: **pnpm**
 
@@ -61,11 +60,14 @@ pnpm docker:reset  # stoppt Container + löscht DB-Volumes (frischer Seed)
 ```
 
 Nach `pnpm docker:dev` läuft die App auf **http://localhost:3000**.
-Login: `admin` / `devpassword` (fest in `compose.dev.yaml`).
 
 Der Stack besteht aus drei Services, die nacheinander starten:
 `mariadb` (DB) → `migrator` (Flyway, einmalig pro Start) → `app`.
 Details stehen direkt in `compose.dev.yaml`.
+
+> Hinweis: Beim ersten Start ist die Datenbank **leer** (kein Seeder mehr).
+> Kategorien und Rezepte legst du selbst an — z. B. über den KI-Assistenten
+> (Drawer → „Neues Rezept (KI)").
 
 ### Nur Vite-Dev (mit Hot-Reload)
 
@@ -76,9 +78,6 @@ pnpm docker:dev        # Stack starten (brauchst du nur für die DB)
 docker stop koch-app-dev   # App-Container stopfen (Port 3000 frei)
 pnpm dev                   # Vite-Dev auf :5173 gegen die dockerisierte DB
 ```
-
-Login dann mit den Daten aus `.env` (nicht aus der Compose), weil
-`seedUser()` beim Vite-Start den Admin neu anlegt.
 
 ## Produktion / Deployment
 
@@ -139,17 +138,9 @@ SQL-Files. Die Compose setzt beide Services über `${APP_TAG}` synchron.
 ## API
 
 Die API ist über SvelteKit-Endpunkte (`src/routes/api/`) realisiert.
-Schreibzugriffe (POST/PUT/DELETE) sind **session-geschützt** — der Client
-muss eingeloggt sein (Cookie). GET-Endpunkte sind ebenfalls hinter dem
-Login (außer `/api/auth/*`).
-
-### Authentifizierung
-
-| Methode | Route | Beschreibung |
-|---|---|---|
-| POST | `/api/auth/login` | Login mit `username`/`password` → setzt Session-Cookie |
-| POST | `/api/auth/logout` | Logout (löscht Session) |
-| GET | `/api/auth/verify` | Prüft, ob die Session gültig ist |
+**Wichtig:** Es gibt kein App-Level-Login — alle Endpunkte sind ungeschützt
+auf App-Ebene. Der Zugriffsschutz liegt vollständig beim Reverse Proxy /
+Netzwerk (die App sollte nie direkt aus dem Internet erreichbar sein).
 
 ### Kategorien & Rezepte
 
@@ -245,8 +236,6 @@ manuell — Flyway checksummt die Dateien.
 
 | Variable | Default | Beschreibung |
 |---|---|---|
-| `ADMIN_USERNAME` | `admin` | Login-Name für den Admin |
-| `ADMIN_PASSWORD` | – | Passwort (muss gesetzt sein, sonst Schreib-Sperre) |
 | `ORIGIN` | – | Öffentliche URL (für Cookie/CORS) |
 | `DB_HOST` | `localhost` | MariaDB-Host |
 | `DB_PORT` | `3306` | MariaDB-Port |

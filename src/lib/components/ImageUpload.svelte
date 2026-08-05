@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { auth } from '$lib/auth.svelte';
   import Icon from './Icon.svelte';
 
   let {
@@ -27,9 +26,7 @@
         method: 'POST',
         body: fd
       });
-      if (res.status === 401) {
-        error = 'Nicht autorisiert – bitte neu einloggen.';
-      } else if (!res.ok) {
+      if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         error = 'Upload fehlgeschlagen' + (data.error ? ': ' + data.error : '');
       } else {
@@ -46,40 +43,22 @@
 </script>
 
 <div class="upload">
-  {#if auth.isLoggedIn}
-    <input
-      bind:this={inputEl}
-      type="file"
-      accept="image/jpeg,image/png,image/webp,image/gif"
-      onchange={onChange}
-      hidden
-    />
-    <button class="btn" onclick={() => inputEl?.click()} disabled={busy}>
-      {#if busy}<Icon name="hourglass" size={18} /> Lade hoch…{:else}<Icon name="camera" size={18} /> Bild hochladen / ändern{/if}
-    </button>
-  {:else}
-    <p class="hint">
-      <Icon name="note" size={16} /> Um ein Bild hinzuzufügen,
-      <a href="/login">als Admin einloggen</a>.
-    </p>
-  {/if}
+  <input
+    bind:this={inputEl}
+    type="file"
+    accept="image/jpeg,image/png,image/webp,image/gif"
+    onchange={onChange}
+    hidden
+  />
+  <button class="btn" onclick={() => inputEl?.click()} disabled={busy}>
+    {#if busy}<Icon name="hourglass" size={18} /> Lade hoch…{:else}<Icon name="camera" size={18} /> Bild hochladen / ändern{/if}
+  </button>
   {#if error}<p class="err">{error}</p>{/if}
 </div>
 
 <style>
   .upload {
     margin: 14px 0 4px;
-  }
-  .hint {
-    color: var(--text-dim);
-    font-size: 0.9rem;
-    margin: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .hint a {
-    color: var(--accent);
   }
   .err {
     color: var(--danger);
