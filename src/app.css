@@ -51,6 +51,11 @@ body {
   /* Body scrollt nicht selbst — der Scroll-Container (.app-scroll) im
      Layout übernimmt das, damit die Scrollbar unter dem Header beginnt. */
   overflow: hidden;
+  /* WICHTIG: Safe-Area (Notch/Home-Indikator) wird NICHT hier über
+     body-padding abgerechnet, sondern an den Flex-Children (TopBar oben,
+     .app-scroll unten via seine Inhalte). Body-Padding + .app-scroll-Höhe
+     führten auf iOS standalone (black-translucent) zu abgeschnittenem
+     Inhalt. Body ist jetzt nur noch der Höhe-Rahmen. */
 }
 
 /* === Globale Scrollbar-Styles (passend zum Dark-Theme) === */
@@ -90,9 +95,11 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Platz für Notch / Handy-Ränder */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* Flex-Column: TopBar (oben, eigene Safe-Area) + .app-scroll (füllt den
+     Rest, scrollt eigenständig). Kein body-Padding mehr — die Safe-Area
+     wird an den Children abgerechnet, nicht doppelt. */
+  display: flex;
+  flex-direction: column;
 }
 
 h1,
@@ -189,10 +196,11 @@ button {
   color: var(--text-dim);
 }
 
-/* Platz unten, damit die fixe BottomNav nichts überdeckt */
-.app {
-  padding-bottom: calc(76px + env(safe-area-inset-bottom));
-}
+/* (Frühere .app-Klasse mit padding-bottom für eine fixe BottomNav entfernt:
+   Eine BottomNav gibt es im aktuellen Layout nicht — das Padding hat
+   fiktiven Platz reserviert und auf iOS zum abgeschnittenen unteren
+   Bereich beigetragen. Der untere Safe-Area-Platz wird jetzt über die
+   Inhalts-Container selbst sichergestellt, z. B. .container padding-bottom.) */
 
 .back-link {
   display: inline-flex;

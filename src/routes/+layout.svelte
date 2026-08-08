@@ -11,9 +11,11 @@
 <OfflineIndicator />
 <TopBar />
 <!--
-  Vollheight-Flex-Layout: TopBar oben (feste 56px), Inhalt darunter
-  scrollt eigenständig → die Scrollbar beginnt unter dem Header statt
-  über die volle Seitenhöhe zu laufen.
+  Vollheight-Flex-Layout: body ist display:flex/flex-direction:column.
+  TopBar oben (nimmt ihren Platz + Safe-Area selbst), .app-scroll füllt
+  den Rest und scrollt eigenständig → die Scrollbar beginnt unter dem
+  Header. Höhe läuft rein über Flex, keine manuelle Viewport-Arithmetik
+  (die auf iOS standalone mit black-translucent abgeschnitten hat).
 -->
 <div class="app-scroll">
   {@render children()}
@@ -23,9 +25,10 @@
 
 <style>
   .app-scroll {
-    /* Höhe = Viewport minus TopBar-Höhe (56px). */
-    height: calc(100vh - 56px);
-    height: calc(100dvh - 56px);
+    /* Flex-Child von body: nimmt den Platz unter der TopBar ein. */
+    flex: 1;
+    min-height: 0; /* erlaubt dem Inhalt zu scrollen statt die Column
+                      wachsen zu lassen */
     overflow-y: auto;
     overflow-x: hidden;
     /* Luft zwischen Header und erstem Inhalt (wirkt app-weit). */

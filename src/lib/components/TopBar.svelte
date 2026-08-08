@@ -25,6 +25,10 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    /* Content-Höhe bleibt 56px; der Notch (safe-area-inset-top) kommt
+       ZUSÄTZLICH oben drauf statt in die 56px gequetscht zu werden
+       (deshalb content-box, nicht border-box wie global sonst). */
+    box-sizing: content-box;
     height: 56px;
     padding: 0 12px;
     padding-top: env(safe-area-inset-top);
