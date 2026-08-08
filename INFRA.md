@@ -99,11 +99,11 @@ damit die PWA korrekt funktioniert (Service Worker, Manifest, Icons):
 | `/sw.js` | Service Worker | `@vite-pwa/sveltekit` (Build) |
 | `/registerSW.js` | SW-Registrierung | `@vite-pwa/sveltekit` (Build) |
 | `/workbox-*.js` | Workbox-Runtime | `@vite-pwa/sveltekit` (Build) |
-| `/robots.txt` | Robots-Exclusion | `public/robots.txt` (Repo) |
-| `/icon-192.png` | PWA-Icon 192×192 | `public/icon-192.png` (Repo) |
-| `/icon-512.png` | PWA-Icon 512×512 | `public/icon-512.png` (Repo) |
-| `/favicon.ico` | Favicon | `public/favicon.ico` (Repo) |
-| `/favicon.svg` | Favicon (SVG) | `public/favicon.svg` (Repo) |
+| `/robots.txt` | Robots-Exclusion | `static/robots.txt` (Repo) |
+| `/icon-192.png` | PWA-Icon 192×192 | `static/icon-192.png` (Repo) |
+| `/icon-512.png` | PWA-Icon 512×512 | `static/icon-512.png` (Repo) |
+| `/favicon.ico` | Favicon | `static/favicon.ico` (Repo) |
+| `/favicon.svg` | Favicon (SVG) | `static/favicon.svg` (Repo) |
 
 ### Warum ohne Auth?
 
