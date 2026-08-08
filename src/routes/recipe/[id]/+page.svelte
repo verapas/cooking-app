@@ -62,7 +62,11 @@
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const res = await fetch(`/api/recipes/${recipe.id}/image`, { method: 'POST', body: fd });
+      const res = await fetch(`/api/recipes/${recipe.id}/image`, {
+        method: 'POST',
+        body: fd,
+        credentials: 'include'
+      });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         uploadError = 'Upload fehlgeschlagen' + (data.error ? ': ' + data.error : '');

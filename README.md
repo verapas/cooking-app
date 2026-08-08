@@ -56,7 +56,7 @@ eigene Dev-Compose bereit, die das Image lokal baut:
 pnpm docker:dev    # baut Image + startet mariadb, migrator, app
 pnpm docker:logs   # Live-Logs aller Services (Strg+C beendet nur die Anzeige)
 pnpm docker:down   # stoppt Container, Volumes bleiben erhalten
-pnpm docker:reset  # stoppt Container + löscht DB-Volumes (frischer Seed)
+pnpm docker:reset  # stoppt Container + löscht DB-Volumes (frischer Start)
 ```
 
 Nach `pnpm docker:dev` läuft die App auf **http://localhost:3000**.
@@ -65,8 +65,11 @@ Der Stack besteht aus drei Services, die nacheinander starten:
 `mariadb` (DB) → `migrator` (Flyway, einmalig pro Start) → `app`.
 Details stehen direkt in `compose.dev.yaml`.
 
-> Hinweis: Beim ersten Start ist die Datenbank **leer** (kein Seeder mehr).
-> Kategorien und Rezepte legst du selbst an — z. B. über den KI-Assistenten
+> Hinweis: Beim ersten Start ist die Datenbank **leer** bis auf die Standard-
+> Kategorien (Suppen, Pasta, …), die beim ersten Request automatisch durch den
+> idempotenten Hook in `src/hooks.server.ts` angelegt werden. Demo-Rezepte und
+> ein App-Login gibt es nicht — Rezepte legst du selbst an, z. B. über den
+> KI-Assistenten
 > (Drawer → „Neues Rezept (KI)").
 
 ### Nur Vite-Dev (mit Hot-Reload)
