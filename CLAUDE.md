@@ -62,7 +62,8 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /recipe/[id]/edit/   # Rezept-Bearbeitung
   /api/                # REST-API-Endpunkte
   /images/             # Bild-Auslieferung
-src/hooks.server.ts    # Pass-Through (kein App-Login mehr — Schutz via Reverse Proxy)
+src/hooks.server.ts    # Kategorie-Seeder beim ersten Request + Pass-Through
+                       # (kein App-Login — Schutz via Reverse Proxy)
 db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — vom
                        # Flyway-Container beim Deploy eingelesen, nicht von der App
 vite.config.ts         # Vite + PWA-Konfiguration
@@ -141,13 +142,17 @@ Die Anbindung ist **provider-unabhängig**: jeder OpenAI-kompatible Anbieter fun
 
 ## Ersteinrichtung / leere Datenbank
 
-Die App besitzt **keinen Seeder** mehr — die DB startet komplett leer.
-Kategorien und Rezepte legst du selbst an:
-- Kategorien: Drawer → „Einstellungen" (bzw. via `POST /api/categories`)
+Beim ersten Request legt `src/hooks.server.ts` automatisch die Standard-
+**Kategorien** an (Suppen, Salate, Pasta, …) — idempotent via
+`seedCategoriesIfEmpty()` aus `src/lib/server/seed.ts`, läuft nur wenn die
+Tabelle noch leer ist. Es gibt **keinen** Auth-Seeder und **keine** Demo-Rezepte
+mehr. Rezepte legst du selbst an:
+- Kategorien ergänzen/ändern: Drawer → „Einstellungen" (bzw. via `POST /api/categories`)
 - Rezepte: Drawer → „Neues Rezept (KI)" (per Chat) oder manuell
 ```bash
 pnpm docker:reset   # stoppt den Stack und löscht die MariaDB-Volumes
-pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren)
+pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
+                    # Standard-Kategorien werden beim ersten Request geseedet
 ```
 
 ## Gotchas (Stolpersteine)
@@ -207,6 +212,15 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren)
 - `POST /api/chat/finalize` - Liefert validiertes `RecipeInput`-JSON aus dem Chat-Verlauf
 - `GET /api/settings` - KI-Status (Key **maskiert**, nie im Klartext; `has_key`, `ai_model`, `ai_base_url`)
 - `PUT /api/settings` - Konfiguration setzen; Body `{ ai_api_key?, ai_model?, ai_base_url? }`
+
+## Infrastruktur
+
+Die App läuft hinter **Traefik** (TLS/Reverse Proxy) → **Nginx Alpine** (Forward Proxy)
+→ **Koch-App** (Node, Port 3000). Authentifizierung über **Keycloak** via
+`traefik-forward-auth` auf Traefik-Ebene. **PWA-Assets** (`/manifest.webmanifest`,
+`/sw.js`, `/workbox-*.js`, Icons) sind über einen separaten Traefik-Router
+**ohne Auth** erreichbar — sonst kann Chrome die PWA nicht installieren.
+Volle Doku: [`INFRA.md`](./INFRA.md).
 
 ## Deployment (Proxmox)
 

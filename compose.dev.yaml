@@ -9,13 +9,15 @@
 #   pnpm docker:dev          # bauen + starten (detached)
 #   pnpm docker:logs         # Logs aller Services anschauen
 #   pnpm docker:down         # alles stoppen (Volumes bleiben erhalten)
-#   pnpm docker:reset        # alles stopfen + DB-Volume löschen (frischer Seed)
+#   pnpm docker:reset        # alles stopfen + DB-Volume löschen (frischer Start)
 #
 # Was passiert beim ersten Start:
 #   1. mariadb hochfahren + auf healthy warten
 #   2. migrator läuft einmalig: legt Schema aus db/migration/ an
-#   3. app startet: verbindet sich zu mariadb, legt Admin-User + Demo-Daten an
-# Danach erreichbar unter http://localhost:3000 (Login: admin / devpassword).
+#   3. app startet: beim ersten Request legt hooks.server.ts die Standard-
+#      Kategorien an (idempotent). Es gibt kein App-Login und keine Demo-Rezepte
+#      — Schutz erfolgt via Reverse Proxy, Rezepte legst du selbst an.
+# Danach erreichbar unter http://localhost:3000.
 # =====================================================================
 
 services:
@@ -80,8 +82,6 @@ services:
     volumes:
       - koch-images-dev:/data/images
     environment:
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: devpassword
       ORIGIN: http://localhost:3000
       DB_HOST: mariadb
       DB_PORT: "3306"

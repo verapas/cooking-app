@@ -2,7 +2,7 @@
 # Koch-App — Beispiel-Compose für Produktion (Proxmox hinter Reverse Proxy)
 # =====================================================================
 # Kopieren nach deploy/compose.yaml und Werte anpassen (Image-Tag,
-# ORIGIN, ADMIN_PASSWORD, DB-Passwörter). Secrets besser aus einer
+# ORIGIN, DB-Passwörter). Secrets besser aus einer
 # .env-Datei lesen (siehe .env.example im selben Ordner).
 #
 # Drei Services:
@@ -83,6 +83,12 @@ services:
     env_file:
       - .env
     environment:
+      # ⚠️ ORIGIN MUSS in der .env stehen (z. B. ORIGIN=https://recipes.lkit.ch),
+      # sonst lehnt SvelteKits CSRF-Schutz multipart-Uploads mit 403 ab
+      # ("Cross-site POST form submissions are forbidden"). Der JSON-Codepfad
+      # wird vom CSRF-Check nicht erfasst, weshalb nur Uploads scheitern —
+      # ein verwirrendes Symptom. Ohne ORIGIN leitet adapter-node die Origin
+      # aus X-Forwarded-* ab, was in der Proxy-Kette oft falsch herauskommt.
       # DB-Verbindung zum mariadb-Service (interner DNS-Name = Service-Name).
       DB_HOST: mariadb
       DB_PORT: "3306"

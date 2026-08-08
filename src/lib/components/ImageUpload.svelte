@@ -24,7 +24,8 @@
       fd.append('image', file);
       const res = await fetch(`/api/recipes/${recipeId}/image`, {
         method: 'POST',
-        body: fd
+        body: fd,
+        credentials: 'include'
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
