@@ -35,12 +35,14 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
 # Jetzt den Source + Config kopieren. vite.config.ts (nicht .js!) und
-# svelte.config.js werden für `pnpm build` gebraucht, public/ für die
-# PWA-Icons, src/ für die App, db/migration/ landet zwar nicht im
+# svelte.config.js werden für `pnpm build` gebraucht, static/ für die
+# PWA-Icons (SvelteKit-Konvention für am Root ausgelieferte Assets —
+# NICHT public/, das ist die Vite-Konvention und wird von SvelteKit
+# ignoriert), src/ für die App, db/migration/ landet zwar nicht im
 # Build-Output, wird aber vom Flyway-Container benötigt (siehe Phase 4).
 COPY tsconfig.json svelte.config.js vite.config.ts ./
 COPY src src
-COPY public public
+COPY static static
 COPY db db
 
 # Typecheck + Produktions-Build. Schlägt der Typecheck fehl, bricht der
