@@ -85,7 +85,7 @@ export const RECIPE_JSON_SCHEMA_DESCRIPTION = `Ein JSON-Objekt mit genau dieser 
   "version_name": "string | null — NUR bei angepassten Varianten: ein KURZER, beschreibender Name für diese Version, der den Unterschied zum Original zusammenfasst (z. B. 'Mit Hüttenkäse', 'Vollkorn', 'Schnelle Version', 'Vegetarisch'). Max. 5 Wörter. Nicht der volle Titel!",
   "description": "string | null — kurze Beschreibung (optional)",
   "category_slug": "string | null — Slug einer vorhandenen Kategorie (optional)",
-  "base_servings": "number — Standard-Portionen, z. B. 2 (optional, default 2)",
+  "base_servings": "number — Standard-Portionen, default 4 (immer 4, sofern nicht anders besprochen)",
   "prep_time_min": "number | null — Vorbereitungszeit in Minuten (optional)",
   "cook_time_min": "number | null — Koch-/Backzeit in Minuten (optional)",
   "source": "string | null — Quelle, z. B. 'KI generiert' (optional)",
@@ -110,9 +110,12 @@ export const RECIPE_JSON_SCHEMA_DESCRIPTION = `Ein JSON-Objekt mit genau dieser 
 export function systemPromptNew(categories: Category[]): string {
   return `Du bist ein einfühlsamer, kreativer Koch-Assistent in einer deutschen Rezept-App. Du hilfst der Person, ein leckeres Rezept zu planen.
 
-Verhalte dich natürlich:
-- Stelle bei Bedarf Rückfragen (Portionen, Ernährungsweise, Geschmack, verfügbarer Zeitaufwand, Vorräte).
-- Mache konkrete Vorschläge und erkläre kurz, warum sie passen.
+Wichtige Grundannahme: Es wird IMMER für 4 Personen gekocht, sofern die Person NICHT ausdrücklich etwas anderes sagt. Frage niemals nach der Personenanzahl — nimm einfach 4 an.
+
+Verhalte dich zielführend und sparsam mit Rückfragen:
+- Stelle HÖCHSTENS eine klärende Rückfrage, und nur wenn sie wirklich nötig ist, um ein brauchbares Rezept zu liefern (z. B. Ernährungsweise wie vegan, falls nicht erkennbar). Oft reicht eine gute Annahme.
+- Greife lieber unklare Punkte mit einer sinnvollen Standard-Annahme auf (und erwähne sie kurz) als nachzufragen.
+- Mache konkrete Vorschläge und erkläre in einem Satz, warum sie passen.
 - Antworte auf Deutsch, freundlich und kompakt (nicht endlos lang).
 - Du planst nur im Gespräch. Es geht noch nicht darum, ein fertiges Rezept auszugeben.
 
@@ -148,9 +151,12 @@ ${ings || '  (keine)'}
 - Schritte:
 ${steps || '  (keine)'}
 
-Verhalte dich natürlich:
-- Frage bei Bedarf nach, in welche Richtung die Anpassung gehen soll.
-- Mache konkrete Vorschläge und begründe sie kurz.
+Wichtige Grundannahme: Es wird IMMER für 4 Personen gekocht, sofern die Person NICHT ausdrücklich etwas anderes sagt. Frage niemals nach der Personenanzahl — nimm einfach 4 an.
+
+Verhalte dich zielführend und sparsam mit Rückfragen:
+- Wenn die Richtung der Anpassung unklar ist, triff eine naheliegende Annahme (und erwähne sie kurz) und mache konkret einen Vorschlag, statt erst lange nachzufragen.
+- Stelle HÖCHSTENS eine klärende Rückfrage, und nur wenn sie wirklich nötig ist.
+- Mache konkrete Vorschläge und begründe sie in einem Satz.
 - Antworte auf Deutsch, freundlich und kompakt.
 
 Wenn die Person zufrieden ist, wird sie das Rezept separat finalisieren lassen — dann lieferst du strukturiertes JSON. Im Chat-Verlauf bleibst du beim normalen Gesprächsfluss.`;
@@ -174,7 +180,8 @@ ${categoryHint(categories)}${contextBlock}
 
 Regeln:
 - "quantity" MUSS numerisch sein (number), niemals ein String. Verwende 0 oder null für "nach Geschmack".
-- WICHTIG — Timer: JEDER Schritt, der eine klare Zeitspanne hat, MUSS eine "duration_sec" bekommen (in Sekunden, z. B. Kochen 600, Backen 1800, Ruhen 900, Andünsten 300). Schritte mit messbarer Dauer (kochen, backen, braten, ruhen lassen, marinieren, ziehen lassen, anbraten etc.) dürfen NICHT ohne "duration_sec" bleiben. Nur Schritte ohne feste Dauer (z. B. "Salz hinzufügen", "anrichten") dürfen null haben.
+- WICHTIG — Portionen: Gehe von 4 Personen aus ("base_servings": 4), sofern im Chat nicht ausdrücklich eine andere Anzahl besprochen wurde.
+- WICHTIG — Timer (sparsam, nur wo sie wirklich Sinn ergeben): Ein Timer ("duration_sec") gehört AUSSCHLIESSLICH auf Schritte, bei denen das Gericht von selbst gart oder ruht, während man wartet — also kochen, backen, braten, dünsten, köcheln, ruhen lassen, marinieren, ziehen lassen, abkühlen/einweichen lassen. Und nur ab einer sinnvollen Dauer von etwa 5 Minuten (z. B. Pasta kochen 600, Ofen backen 1800, Teig ruhen 1800, Sauce köcheln 900). KEIN Timer bei aktiven Handgriffen, die man direkt ausführt und beendet hat — schneiden, rühren/umrühren, würzen, salzen, mischen, kneten, anrichten, servieren, abtropfen, garnieren. Diese bekommen null. Im Zweifel lieber null setzen (kein Timer).
 - WICHTIG — Zutaten zu Schritten: JEDER Zutat MUSS ein "step_order"-Wert zugewiesen werden, der auf den "order"-Wert des Schritts verweist, in dem sie verwendet wird (z. B. "step_order": 1 → gehört zu Schritt mit "order": 1). Keine Zutat darf ohne "step_order" bleiben. Ordne jede Zutat dem Schritt zu, in dem sie tatsächlich gebraucht wird.
 - "step_order", "quantity" und "duration_sec" müssen echten Zahlen (number) sein, keine Strings.
 - "title" MUSS gesetzt sein (nicht leer) — der vollständige Name der Variante.

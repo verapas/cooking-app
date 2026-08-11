@@ -75,7 +75,7 @@
       const greeting =
         mode === 'improve'
           ? `Ich helfe dir gerne, „${contextTitle || 'dieses Rezept'}" anzupassen. Was möchtest du verändern? (z. B. schneller, mehr Portionen, andere Gewürze)`
-          : 'Hallo! Ich helfe dir, ein Rezept zu planen. Was hast du vor — welche Art Gericht, wie viele Portionen, welche Zutaten hast du da?';
+          : 'Hallo! Ich helfe dir, ein Rezept zu planen. Sag mir einfach, worauf du Lust hast — welche Art Gericht oder welche Zutaten. (Ich gehe standardmäßig von 4 Personen aus.)';
       untrack(() => {
         messages = [{ role: 'assistant', content: greeting }];
       });
