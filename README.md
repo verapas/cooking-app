@@ -91,14 +91,17 @@ Du: git commit -m "fix: … [deploy]" && git push origin main
         │
         ▼
 GitHub Actions (docker-publish.yml)
-   ├─ baut das Image aus dem Dockerfile
-   ├─ taggt es als ghcr.io/<owner>/<repo>:edge
-   └─ pusht es nach GHCR (GitHub Container Registry)
+   ├─ baut ZWEI Images aus dem Dockerfile:
+   │    ghcr.io/<owner>/<repo>:edge           → App (adapter-node)
+   │    ghcr.io/<owner>/<repo>-migrator:edge  → Flyway + db/migration
+   ├─ taggt beide identisch (:edge, :sha-<short>)
+   └─ pusht sie nach GHCR (GitHub Container Registry)
         │
         ▼
 Dein Server (Proxmox):
-   └─ Watchtower erkennt neues Image → docker compose pull && up -d
-      (mariadb + migrator + app aktualisieren sich automatisch)
+   └─ Watchtower erkennt neue Images → docker compose pull && up -d
+      (migrator läuft einmal mit den neuen SQL-Files, dann startet
+      die App gegen das aktuelle Schema — alles automatisch)
 ```
 
 ### Der `[deploy]`-Trigger
@@ -134,9 +137,11 @@ ein Merge nicht automatisch dein Prod-Deployment anfasst.
 
 ### Watchtower-Hinweis
 
-Wenn dein Watchtower das App-Image updatet, muss er auch den **Migrator**
-mit demselben Tag neu starten — sonst migriert dieser mit veralteten
-SQL-Files. Die Compose setzt beide Services über `${APP_TAG}` synchron.
+Die Migrationen stecken **im Migrator-Image** (`…-migrator`, gleicher Tag
+wie die App) — nicht mehr in einem Bind-Mount auf dem Server. App und
+Migrator müssen daher mit demselben `${APP_TAG}` gezogen werden; die
+Compose setzt beide Services über die Variable synchron. Ablauf beim
+Update: Pull → Migrator läuft einmal mit den neuen SQL-Files → App startet.
 
 ## API
 

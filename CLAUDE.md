@@ -64,8 +64,9 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /images/             # Bild-Auslieferung
 src/hooks.server.ts    # Kategorie-Seeder beim ersten Request + Pass-Through
                        # (kein App-Login — Schutz via Reverse Proxy)
-db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — vom
-                       # Flyway-Container beim Deploy eingelesen, nicht von der App
+db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — landen
+                       # im Migrator-Image (Dockerfile-Target "migrator"), nicht
+                       # per Bind-Mount auf dem Server; die App selbst migriert nie
 vite.config.ts         # Vite + PWA-Konfiguration
 ```
 
@@ -241,18 +242,23 @@ Tests relevant — dabei muss eine MariaDB erreichbar sein (Env-Variablen
 
 **Drei Services** in beiden Compose-Files:
 `mariadb` (DB) → `migrator` (Flyway, einmalig pro Deploy) → `app`.
+- **Zwei Images** pro Release (gleich getaggt, CI pusht beide):
+  `ghcr.io/<owner>/<repo>` (App) und `ghcr.io/<owner>/<repo>-migrator`
+  (Flyway + `db/migration/` der Image-Revision).
+- **Migration**: Die SQL-Files sind **im Migrator-Image enthalten** (Dockerfile-
+  Target `migrator`) — kein Bind-Mount vom Host mehr. Damit sind App-Revision
+  und Schema-Version immer synchron (Watchtower aktualisiert Images, keine
+  Host-Dateien). Die App selbst migriert *nicht* — sie geht davon aus, dass
+  das Schema aktuell ist.
 - **Image-Tags** via GitHub Actions (`.github/workflows/docker-publish.yml`):
   - Commit auf `main` **mit** `[deploy]` in der Message → `:edge`, `:sha-<short>`
   - Git-Tag `v1.2.3` → `:1.2.3`, `:1.2`, `:latest`
   - **`:latest` entsteht nur über Git-Tags**, nie über main-Merges.
 - **Trigger**: Der Image-Bau+Push läuft *nur*, wenn die Head-Commit-Message
   den Marker `[deploy]` enthält. Ohne ihn läuft nur `ci.yml` (Typecheck+Build).
-- **Migration**: Flyway-Container liest `db/migration/V*__*.sql` (Bind-Mount
-  aus dem Repo) und migriert vor jedem App-Start. Die App selbst migriert
-  *nicht* — sie geht davon aus, dass das Schema aktuell ist.
-- **Watchtower**: Wenn dein Watchtower das App-Image updated, muss es auch
-  den Migrator mit demselben `${APP_TAG}` anstoßen (sonst migriert dieser
-  mit veralteten SQL-Files). Compose setzt beide via `APP_TAG` synchron.
+- **Watchtower**: App und Migrator müssen mit demselben `${APP_TAG}` gezogen
+  werden — Compose setzt beide Services über die Variable synchron. Update-
+  Ablauf: Pull → migrator läuft einmal mit den neuen SQL-Files → App startet.
 - **Volumes**: `koch-db` (MariaDB-Daten) und `koch-images` (App-Bilder).
   `/data` im App-Container enthält nur noch Bilder — die DB ist in MariaDB.
 - **Reverse Proxy** (Nginx/Caddy) vor `127.0.0.1:3000` für TLS Terminierung.
