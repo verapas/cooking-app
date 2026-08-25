@@ -44,7 +44,7 @@
       <Icon name="info" size={20} />
       <div>
         <p>Es ist noch kein API-Key hinterlegt.</p>
-        <a href="/settings" class="btn btn-primary btn-sm">Jetzt einrichten</a>
+        <a href="/settings/ai" class="btn btn-primary btn-sm">Jetzt einrichten</a>
       </div>
     </div>
   {/if}

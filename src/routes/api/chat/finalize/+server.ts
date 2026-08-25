@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRecipe, listCategories } from '$lib/server/queries';
+import { getRecipe, listCategories, listKitchenTools } from '$lib/server/queries';
 import { getApiKey } from '$lib/server/settings';
 import {
   finalizeRecipe,
@@ -66,11 +66,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const mode: ChatMode = body.mode === 'improve' ? 'improve' : 'new';
 
-  // Kontext laden: Kategorien (immer) + Rezept (nur Modus 'improve').
-  // finalizeRecipe baut daraus selbst den strikten Finalize-Prompt
-  // („gib AUSSCHLIESSLICH JSON aus") — der Chat-Prompt hat hier nichts
-  // zu suchen, da er die KI ins Gesprächsverhalten drängt.
+  // Kontext laden: Kategorien + Küchenutensilien (immer) + Rezept (nur
+  // Modus 'improve'). finalizeRecipe baut daraus selbst den strikten
+  // Finalize-Prompt („gib AUSSCHLIESSLICH JSON aus") — der Chat-Prompt hat
+  // hier nichts zu suchen, da er die KI ins Gesprächsverhalten drängt.
   const categories = await listCategories();
+  const tools = await listKitchenTools();
   let contextRecipe = undefined;
   if (mode === 'improve') {
     const recipeId =
@@ -92,7 +93,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   try {
-    const recipe = await finalizeRecipe(messages, categories, contextRecipe);
+    const recipe = await finalizeRecipe(messages, categories, tools, contextRecipe);
     return json({ recipe });
   } catch (err) {
     if (err instanceof NoApiKeyError) {

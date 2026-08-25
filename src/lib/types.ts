@@ -8,6 +8,12 @@ export interface Category {
   sort_order: number;
 }
 
+/** Küchenausstattung der Person (z. B. Ofen, Airfryer) — KI-Kontext. */
+export interface KitchenTool {
+  id: number;
+  name: string;
+}
+
 export interface Recipe {
   id: number;
   title: string;

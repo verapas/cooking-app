@@ -3,13 +3,22 @@ import type { RequestHandler } from './$types';
 import { createRecipe, listRecipes } from '$lib/server/queries';
 import type { RecipeInput } from '$lib/types';
 
-// GET /api/recipes[?category_id=…&q=…]  (offen, kein Token nötig)
+// GET /api/recipes[?category_id=…&q=…&limit=…&offset=…]  (offen, kein Token nötig)
 export const GET: RequestHandler = async ({ url }) => {
   const categoryId = url.searchParams.get('category_id');
   const q = url.searchParams.get('q') ?? undefined;
+  // Limit/Offset für „Mehr laden": defensiv parsen und clamping
+  // (Limit 1–100, Offset ≥ 0), damit keine Blödsinn-Werte an die DB gehen.
+  const limitRaw = url.searchParams.get('limit');
+  const offsetRaw = url.searchParams.get('offset');
+  const limit =
+    limitRaw !== null ? Math.min(Math.max(Number(limitRaw) || 0, 1), 100) : undefined;
+  const offset = offsetRaw !== null ? Math.max(Number(offsetRaw) || 0, 0) : undefined;
   const recipes = await listRecipes({
     categoryId: categoryId ? Number(categoryId) : undefined,
-    q: q && q.trim() ? q.trim() : undefined
+    q: q && q.trim() ? q.trim() : undefined,
+    limit,
+    offset
   });
   return json(recipes);
 };
