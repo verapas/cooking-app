@@ -1,10 +1,8 @@
 import { listRecipes } from '$lib/server/queries';
 import type { PageServerLoad } from './$types';
 
-// Wie viele Rezepte initial/nachgeladen werden („Mehr laden"-Button).
-export const RECIPES_PAGE_SIZE = 30;
-
 // Kategorien kommen vom Layout-Load (für den Drawer).
+// Initial 30 Rezepte — weitere per „Mehr laden"-Button (PAGE_SIZE in +page.svelte).
 export const load: PageServerLoad = async () => {
-  return { recipes: await listRecipes({ limit: RECIPES_PAGE_SIZE }) };
+  return { recipes: await listRecipes({ limit: 30 }) };
 };
