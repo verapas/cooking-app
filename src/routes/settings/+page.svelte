@@ -22,10 +22,16 @@
   // selbst beim jeweiligen Provider holen).
   const presets = [
     {
+      label: 'z.ai Coding Plan',
+      baseURL: 'https://api.z.ai/api/coding/paas/v4',
+      model: 'glm-5.2',
+      hint: 'Nutzt dein GLM-Coding-Plan-Abo (Quota statt Token-Guthaben). Gleicher Key wie bei z.ai.'
+    },
+    {
       label: 'z.ai (GLM)',
       baseURL: 'https://api.z.ai/api/paas/v4',
       model: 'glm-4.6',
-      hint: 'Direkter z.ai-Zugang — dein z.ai-Abo. Key unter z.ai erstellen.'
+      hint: 'Standard-Plattform-API — verrechnet pro Token über Guthaben, NICHT über den Coding Plan.'
     },
     {
       label: 'OpenRouter',
