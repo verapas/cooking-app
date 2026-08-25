@@ -14,14 +14,20 @@
   let cookTimeMin = $state(data.recipe.cook_time_min ?? 0);
   let imageUrl = $state(data.recipe.image_url);
   let source = $state(data.recipe.source ?? '');
-  let selectedVersionId = $state(data.recipe.id);
+  let versionName = $state(data.recipe.version_name ?? '');
 
   let steps = $state([...data.recipe.steps].sort((a, b) => a.order - b.order));
   let ingredients = $state([...data.recipe.ingredients].sort((a, b) => a.sort_order - b.sort_order));
 
   let hasVersions = $derived(data.versions.length > 1);
-  let versions = $derived(data.versions);
   let categories = $derived(data.categories);
+  // Aktuell bearbeitete Version: Die Version wird VOR dem Bearbeiten auf der
+  // Detailseite ausgewählt — hier nur noch statisch anzeigen, welcher das ist.
+  let currentVersion = $derived(data.versions.find(v => v.id === data.recipe.id));
+  let isMainVersion = $derived(currentVersion?.is_main ?? true);
+  let currentVersionLabel = $derived(
+    currentVersion?.version_name || (isMainVersion ? 'Standard' : `Variante #${data.recipe.id}`)
+  );
 
   let isSaving = $state(false);
   let error = $state('');
@@ -128,6 +134,7 @@
         cook_time_min: cookTimeMin || null,
         image_url: imageUrl,
         source: source.trim() || null,
+        version_name: !isMainVersion && versionName.trim() ? versionName.trim() : null,
         steps: stepInputs,
         ingredients: ingredientInputs
       };
@@ -151,10 +158,6 @@
       isSaving = false;
     }
   }
-
-  function changeVersion(versionId: number) {
-    goto(`/recipe/${versionId}/edit`);
-  }
 </script>
 
 <svelte:head>
@@ -172,19 +175,13 @@
   {/if}
 
   {#if hasVersions}
-    <div class="version-selector">
-      <label for="version-select">Version:</label>
-      <select id="version-select" bind:value={selectedVersionId} onchange={(e) => {
-        const target = e.target as HTMLSelectElement;
-        changeVersion(Number(target.value));
-      }}>
-        {#each versions as version (version.id)}
-          <option value={version.id}>
-            {version.version_name || (version.is_main ? 'Standard' : `Variante #${version.id}`)}
-            {version.is_main ? ' (Haupt)' : ''}
-          </option>
-        {/each}
-      </select>
+    <div class="version-badge">
+      <Icon name="branch" size={16} />
+      <span>
+        Du bearbeitest: <strong>{currentVersionLabel}</strong>
+        ({isMainVersion ? 'Hauptrezept' : 'Variante'})
+      </span>
+      <span class="hint">Andere Version? Wähle sie auf der Rezept-Seite aus, bevor du bearbeitest.</span>
     </div>
   {/if}
 
@@ -196,6 +193,19 @@
         <label for="title">Titel *</label>
         <input id="title" type="text" bind:value={title} required />
       </div>
+
+      {#if !isMainVersion}
+        <div class="form-group">
+          <label for="versionName">Versionsname</label>
+          <input
+            id="versionName"
+            type="text"
+            bind:value={versionName}
+            maxlength="80"
+            placeholder="z. B. Mit Hüttenkäse, Schnelle Version, Vegetarisch"
+          />
+        </div>
+      {/if}
 
       <div class="form-group">
         <label for="description">Beschreibung</label>
@@ -254,6 +264,54 @@
     </section>
 
     <section class="form-section">
+      <h2>Zutaten</h2>
+
+      {#each ingredients as ingredient (ingredient.id)}
+        <div class="ingredient-item">
+          <div class="item-header">
+            <div class="item-actions">
+              <button
+                type="button"
+                class="btn-icon btn-danger"
+                onclick={() => removeIngredient(ingredient.id)}
+                aria-label="Zutat löschen"
+              ><Icon name="trash" size={18} /></button>
+            </div>
+          </div>
+
+          <div class="form-row ingredients-row">
+            <div class="form-group form-group-name">
+              <label>Name</label>
+              <input type="text" bind:value={ingredient.name} required />
+            </div>
+
+            <div class="form-group">
+              <label>Menge</label>
+              <input type="number" bind:value={ingredient.quantity} step="0.1" />
+            </div>
+
+            <div class="form-group">
+              <label>Einheit</label>
+              <input type="text" bind:value={ingredient.unit} />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Zuordnung zu Schritt</label>
+            <select bind:value={ingredient.step_id}>
+              <option value={null}>Global (alle Schritte)</option>
+              {#each steps as step (step.id)}
+                <option value={step.id}>Schritt {step.order}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+      {/each}
+
+      <button type="button" class="btn btn-secondary" onclick={addIngredient}>+ Zutat hinzufügen</button>
+    </section>
+
+    <section class="form-section">
       <h2>Schritte</h2>
 
       {#each steps as step (step.id)}
@@ -263,7 +321,7 @@
             <div class="step-actions">
               <button type="button" class="btn-icon" onclick={() => moveStep(step.id, 'up')} disabled={step.order === 1}>↑</button>
               <button type="button" class="btn-icon" onclick={() => moveStep(step.id, 'down')} disabled={step.order === steps.length}>↓</button>
-              <button type="button" class="btn-icon btn-danger" onclick={() => removeStep(step.id)}><Icon name="trash" size={18} /></button>
+              <button type="button" class="btn-icon btn-danger" onclick={() => removeStep(step.id)} aria-label="Schritt löschen"><Icon name="trash" size={18} /></button>
             </div>
           </div>
 
@@ -280,47 +338,6 @@
       {/each}
 
       <button type="button" class="btn btn-secondary" onclick={addStep}>+ Schritt hinzufügen</button>
-    </section>
-
-    <section class="form-section">
-      <h2>Zutaten</h2>
-
-      {#each ingredients as ingredient (ingredient.id)}
-        <div class="ingredient-item">
-          <div class="ingredient-header">
-            <div class="form-row flex-grow">
-              <div class="form-group flex-grow">
-                <label>Name</label>
-                <input type="text" bind:value={ingredient.name} required />
-              </div>
-
-              <div class="form-group">
-                <label>Menge</label>
-                <input type="number" bind:value={ingredient.quantity} step="0.1" />
-              </div>
-
-              <div class="form-group">
-                <label>Einheit</label>
-                <input type="text" bind:value={ingredient.unit} />
-              </div>
-            </div>
-
-            <button type="button" class="btn-icon btn-danger" onclick={() => removeIngredient(ingredient.id)}><Icon name="trash" size={18} /></button>
-          </div>
-
-          <div class="form-group">
-            <label>Zuordnung zu Schritt</label>
-            <select bind:value={ingredient.step_id}>
-              <option value={null}>Global (alle Schritte)</option>
-              {#each steps as step (step.id)}
-                <option value={step.id}>Schritt {step.order}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
-      {/each}
-
-      <button type="button" class="btn btn-secondary" onclick={addIngredient}>+ Zutat hinzufügen</button>
     </section>
 
     <div class="form-actions sticky">
@@ -354,29 +371,28 @@
     margin-bottom: 16px;
   }
 
-  .version-selector {
+  .version-badge {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px 8px;
     margin: 12px 0 20px;
     padding: 12px;
     background: var(--surface-2);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-  }
-
-  .version-selector label {
     font-size: 0.9rem;
     color: var(--text-dim);
   }
 
-  .version-selector select {
-    flex: 1;
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface);
+  .version-badge strong {
     color: var(--text);
-    font-size: 0.9rem;
+  }
+
+  .version-badge .hint {
+    flex-basis: 100%;
+    font-size: 0.78rem;
+    color: var(--text-faint);
   }
 
   .edit-form {
@@ -435,27 +451,19 @@
     gap: 12px;
   }
 
-  .form-row.flex-grow {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
+  /* Zutaten-Zeile: mobil untereinander, ab 560px Name breiter als Menge/Einheit. */
+  .form-row.ingredients-row {
+    grid-template-columns: 1fr;
   }
 
-  .form-row.flex-grow .form-group {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .form-row.flex-grow .form-group input {
+  .form-row.ingredients-row .form-group-name input {
     width: 100%;
     min-width: 0;
   }
 
   @media (min-width: 560px) {
-    .form-row.flex-grow {
-      flex-direction: row;
+    .form-row.ingredients-row {
+      grid-template-columns: 2fr 1fr 1fr;
     }
 
     .form-row {
@@ -473,8 +481,19 @@
     overflow-x: hidden;
   }
 
-  .ingredient-header {
-    flex-wrap: wrap;
+  .step-header,
+  .item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .item-actions,
+  .step-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
   }
 
   .step-number {
@@ -489,12 +508,6 @@
     font-weight: 700;
     font-size: 0.9rem;
     flex-shrink: 0;
-  }
-
-  .step-actions {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
   }
 
   .btn-icon {
