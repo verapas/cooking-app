@@ -13,14 +13,17 @@
   } = $props();
 
   // Dauer ist für diese Instanz fest → bewusst nur Initialwert (untrack).
+  // `total` = anpassbare Grunddauer — verschiebt sich mit, wenn per ±-Buttons
+  // Minuten hinzugefügt/entfernt werden, damit der Kreis zur neuen Restzeit passt.
   let remaining = $state(untrack(() => durationSec));
+  let total = $state(untrack(() => durationSec));
   let running = $state(false);
   let finished = $state(false);
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   let display = $derived(fmt(remaining));
   // Kreis-Fortschritt: 0 = voll, 1 = leer
-  let progress = $derived(durationSec > 0 ? 1 - remaining / durationSec : 0);
+  let progress = $derived(total > 0 ? 1 - remaining / total : 0);
   const R = 44;
   const CIRC = 2 * Math.PI * R;
 
@@ -67,7 +70,7 @@
     stopInterval();
     running = false;
     finished = false;
-    remaining = durationSec;
+    remaining = total;
     void releaseWakeLock();
   }
 
@@ -78,11 +81,15 @@
     running = false;
     finished = false;
     remaining = d;
+    total = d;
     void releaseWakeLock();
   });
 
   function adjustTime(delta: number): void {
     remaining = Math.max(0, remaining + delta);
+    // Grunddauer mitverschieben: vergangene Zeit bleibt erhalten, der Kreis
+    // skaliert auf die neue Gesamtzeit (statt über 100 % hinauszulaufen)
+    total = Math.max(remaining, total + delta);
   }
 
   onDestroy(() => {
@@ -115,9 +122,9 @@
       <button class="btn" onclick={pause}><Icon name="pause" size={18} /> Pause</button>
     {:else}
       <button class="btn btn-primary bigbtn" onclick={start}>
-        <Icon name="play" size={18} filled /> {remaining < durationSec ? 'Weiter' : 'Timer starten'}
+        <Icon name="play" size={18} filled /> {remaining < total ? 'Weiter' : 'Timer starten'}
       </button>
-      {#if remaining < durationSec}
+      {#if remaining < total}
         <button class="btn" onclick={reset} aria-label="Zurücksetzen"><Icon name="restart" size={18} /></button>
       {/if}
     {/if}

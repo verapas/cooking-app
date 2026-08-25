@@ -64,7 +64,6 @@
 
       {#if stepIngredients.length}
         <div class="ings">
-          <h3>Du brauchst dafür:</h3>
           <ul>
             {#each stepIngredients as ing (ing.id)}
               <li>{formatIngredient(ing, factor)}</li>
@@ -136,11 +135,6 @@
   }
   .ings {
     margin-bottom: 14px;
-  }
-  .ings h3 {
-    font-size: 0.95rem;
-    color: var(--text-dim);
-    margin: 0 0 6px;
   }
   .ings ul {
     list-style: none;
