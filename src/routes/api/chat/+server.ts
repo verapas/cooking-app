@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRecipe, listCategories } from '$lib/server/queries';
+import { getRecipe, listCategories, listKitchenTools } from '$lib/server/queries';
 import { getApiKey } from '$lib/server/settings';
 import {
   streamChat,
@@ -68,8 +68,9 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const mode: ChatMode = body.mode === 'improve' ? 'improve' : 'new';
 
-  // --- System-Prompt nach Modus wählen ---
+  // --- System-Prompt nach Modus wählen (inkl. Küchenutensilien) ---
   let systemPrompt: string;
+  const tools = await listKitchenTools();
   if (mode === 'improve') {
     const recipeId =
       typeof body.recipeId === 'number'
@@ -82,10 +83,10 @@ export const POST: RequestHandler = async ({ request }) => {
     }
     const recipe = await getRecipe(recipeId);
     if (!recipe) throw error(404, 'Rezept nicht gefunden.');
-    systemPrompt = systemPromptImprove(recipe);
+    systemPrompt = systemPromptImprove(recipe, tools);
   } else {
     const categories = await listCategories();
-    systemPrompt = systemPromptNew(categories);
+    systemPrompt = systemPromptNew(categories, tools);
   }
 
   // --- Key-Check VOR dem Stream: klare JSON-Fehlermeldung ---

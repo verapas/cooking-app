@@ -18,7 +18,7 @@
 
 import OpenAI from 'openai';
 import { getApiKey, getModel, getBaseUrl } from './settings';
-import type { Category, RecipeInput, RecipeWithDetails } from '$lib/types';
+import type { Category, KitchenTool, RecipeInput, RecipeWithDetails } from '$lib/types';
 
 // --- Typen ---
 
@@ -75,6 +75,18 @@ function categoryHint(categories: Category[]): string {
 }
 
 /**
+ * Baut die Küchenutensilien zu einem Hinweis-String für den Prompt, damit
+ * die KI nur Zubereitungen vorschlägt, die mit der vorhandenen Ausstattung
+ * machbar sind. Bei leerer Liste wird ein leerer String zurückgegeben
+ * (kein Prompt-Block, kein Token-Verschwend).
+ */
+function kitchenToolsHint(tools: KitchenTool[]): string {
+  if (tools.length === 0) return '';
+  const list = tools.map((t) => t.name).join(', ');
+  return `Verfügbare Küchenutensilien der Person: ${list}. Bevorzuge Zubereitungsarten, die mit dieser Ausstattung machbar sind. Fehlt für eine Technik ein besonderes Utensil, weise kurz darauf hin und nenne eine Alternative.`;
+}
+
+/**
  * Beschreibt das JSON-Schema, das finalizeRecipe erzwingt. Das entspricht
  * exakt RecipeInput/StepInput/IngredientInput (src/lib/types.ts), gekürzt
  * um die internen Felder (id, recipe_id, …).
@@ -107,7 +119,8 @@ export const RECIPE_JSON_SCHEMA_DESCRIPTION = `Ein JSON-Objekt mit genau dieser 
  * Planen eines Rezepts. Die KI darf Fragen stellen, Vorschläge machen.
  * Erst in der Finalize-Phase wird das Rezept-JSON erzeugt.
  */
-export function systemPromptNew(categories: Category[]): string {
+export function systemPromptNew(categories: Category[], tools: KitchenTool[]): string {
+  const toolsHint = kitchenToolsHint(tools);
   return `Du bist ein einfühlsamer, kreativer Koch-Assistent in einer deutschen Rezept-App. Du hilfst der Person, ein leckeres Rezept zu planen.
 
 Wichtige Grundannahme: Es wird IMMER für 4 Personen gekocht, sofern die Person NICHT ausdrücklich etwas anderes sagt. Frage niemals nach der Personenanzahl — nimm einfach 4 an.
@@ -119,7 +132,7 @@ Verhalte dich zielführend und sparsam mit Rückfragen:
 - Antworte auf Deutsch, freundlich und kompakt (nicht endlos lang).
 - Du planst nur im Gespräch. Es geht noch nicht darum, ein fertiges Rezept auszugeben.
 
-${categoryHint(categories)}
+${toolsHint ? toolsHint + '\n\n' : ''}${categoryHint(categories)}
 
 Wenn die Person zufrieden ist, wird sie dich separat auffordern, das Rezept zu erstellen — dann lieferst du strukturiertes JSON. Im Chat-Verlauf bleibst du beim normalen Gesprächsfluss.`;
 }
@@ -128,7 +141,7 @@ Wenn die Person zufrieden ist, wird sie dich separat auffordern, das Rezept zu e
  * System-Prompt für die Chat-Phase (Modus 'improve'): es liegt ein
  * bestehendes Rezept vor, das angepasst/verbessert werden soll.
  */
-export function systemPromptImprove(recipe: RecipeWithDetails): string {
+export function systemPromptImprove(recipe: RecipeWithDetails, tools: KitchenTool[]): string {
   const steps = recipe.steps
     .map((s) => `  ${s.order}. ${s.instruction}${s.duration_sec ? ` (${s.duration_sec}s)` : ''}`)
     .join('\n');
@@ -138,6 +151,7 @@ export function systemPromptImprove(recipe: RecipeWithDetails): string {
         `  - ${i.name}${i.quantity ? ` ${i.quantity}${i.unit ? ' ' + i.unit : ''}` : ' (nach Geschmack)'}`
     )
     .join('\n');
+  const toolsHint = kitchenToolsHint(tools);
   return `Du bist ein Koch-Assistent in einer deutschen Rezept-App. Die Person möchte das folgende Rezept verbessern oder anpassen (z. B. gesünder, schneller, andere Portionen, vegetarisch, andere Gewürze).
 
 Bestehendes Rezept:
@@ -151,7 +165,7 @@ ${ings || '  (keine)'}
 - Schritte:
 ${steps || '  (keine)'}
 
-Wichtige Grundannahme: Es wird IMMER für 4 Personen gekocht, sofern die Person NICHT ausdrücklich etwas anderes sagt. Frage niemals nach der Personenanzahl — nimm einfach 4 an.
+${toolsHint ? toolsHint + '\n\n' : ''}Wichtige Grundannahme: Es wird IMMER für 4 Personen gekocht, sofern die Person NICHT ausdrücklich etwas anderes sagt. Frage niemals nach der Personenanzahl — nimm einfach 4 an.
 
 Verhalte dich zielführend und sparsam mit Rückfragen:
 - Wenn die Richtung der Anpassung unklar ist, triff eine naheliegende Annahme (und erwähne sie kurz) und mache konkret einen Vorschlag, statt erst lange nachzufragen.
@@ -167,16 +181,23 @@ Wenn die Person zufrieden ist, wird sie das Rezept separat finalisieren lassen �
  * Wird immer verwendet — egal welcher Modus. Beim Modus 'improve' wird
  * das bestehende Rezept zusätzlich als Anpassungs-Grundlage eingeblendet.
  */
-function finalizeSystemPrompt(categories: Category[], contextRecipe?: RecipeWithDetails): string {
+function finalizeSystemPrompt(
+  categories: Category[],
+  tools: KitchenTool[],
+  contextRecipe?: RecipeWithDetails
+): string {
   const contextBlock = contextRecipe
     ? `\n\nDu erstellst eine ANGEPASSTE Variante dieses bestehenden Rezepts. Berücksichtige die Wünsche aus der Unterhaltung. Das Original als Grundlage:\n${describeRecipeForPrompt(contextRecipe)}`
+    : '';
+  const toolsBlock = kitchenToolsHint(tools)
+    ? `\n\n${kitchenToolsHint(tools)} Formuliere die Schritte so, dass sie mit dieser Ausstattung machbar sind.`
     : '';
 
   return `Du bist ein Rezept-Generator in einer deutschen Rezept-App. Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt aus — keinen Erklärungstext, kein Markdown, keine Code-Einfassung. Antworte nicht im Gespräch, stelle keine Rückfragen, bestätige nichts. Liefere nur das fertige Rezept als JSON.
 
 ${RECIPE_JSON_SCHEMA_DESCRIPTION}
 
-${categoryHint(categories)}${contextBlock}
+${categoryHint(categories)}${contextBlock}${toolsBlock}
 
 Regeln:
 - "quantity" MUSS numerisch sein (number), niemals ein String. Verwende 0 oder null für "nach Geschmack".
@@ -258,15 +279,17 @@ export async function* streamChat(
  *
  * @param messages   bisheriger Chat-Verlauf (user/assistant)
  * @param categories verfügbare Kategorien (für category_slug)
+ * @param tools      Küchenutensilien der Person (Prompt-Kontext)
  * @param context    optionales Kontext-Rezept (Modus 'improve')
  */
 export async function finalizeRecipe(
   messages: ChatMessage[],
   categories: Category[],
+  tools: KitchenTool[],
   contextRecipe?: RecipeWithDetails
 ): Promise<RecipeInput> {
   const { client, model } = await createClient();
-  const systemPrompt = finalizeSystemPrompt(categories, contextRecipe);
+  const systemPrompt = finalizeSystemPrompt(categories, tools, contextRecipe);
   const completion = await client.chat.completions.create({
     model,
     // JSON-Modus erzwingen — weitreichend unterstützt (auch GLM).

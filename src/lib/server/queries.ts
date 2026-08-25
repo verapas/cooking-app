@@ -13,6 +13,7 @@ import type {
   CategoryInput,
   CategoryUpdateInput,
   Ingredient,
+  KitchenTool,
   RecipeInput,
   RecipeListItem,
   RecipeWithDetails,
@@ -87,12 +88,44 @@ export async function deleteCategory(id: number): Promise<boolean> {
   return result.affectedRows > 0;
 }
 
+// ---------- Küchenutensilien ----------
+
+/** Alle Utensilien der Person, alphabetisch (KI-Kontext + Einstellungen). */
+export async function listKitchenTools(): Promise<KitchenTool[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name FROM kitchen_tools ORDER BY name ASC'
+  );
+  return rows as unknown as KitchenTool[];
+}
+
+/**
+ * Legt ein Utensil an. Duplikate (case-insensitiv, dank Collation)
+ * werden stillschweigend aktualisiert → idempotent, kein Fehler.
+ */
+export async function createKitchenTool(name: string): Promise<number> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `INSERT INTO kitchen_tools (name) VALUES (?)
+     ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+    [name]
+  );
+  return result.insertId;
+}
+
+export async function deleteKitchenTool(id: number): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    'DELETE FROM kitchen_tools WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
 // ---------- Rezepte: Listen ----------
 
 export async function listRecipes(opts?: {
   categoryId?: number;
   q?: string;
   limit?: number;
+  offset?: number;
 }): Promise<RecipeListItem[]> {
   const where: string[] = ['r.parent_recipe_id IS NULL'];
   const params: unknown[] = [];
@@ -106,6 +139,7 @@ export async function listRecipes(opts?: {
   }
   const clause = `WHERE ${where.join(' AND ')}`;
   const limit = opts?.limit ?? 200;
+  const offset = opts?.offset ?? 0;
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.*, c.name AS category_name, c.slug AS category_slug
@@ -113,8 +147,8 @@ export async function listRecipes(opts?: {
      LEFT JOIN categories c ON c.id = r.category_id
      ${clause}
      ORDER BY r.is_favorite DESC, r.title ASC, r.created_at DESC
-     LIMIT ?`,
-    [...params, limit]
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
   );
 
   return rows.map((r) => {

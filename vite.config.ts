@@ -77,7 +77,9 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /\/rezepte\/.*/i,
+            // Rezept-Detailseiten (NetworkFirst: frisch wenn online,
+            // letzter Stand aus dem Cache bei Timeout/Offline).
+            urlPattern: /\/recipe\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'recipes-cache',
