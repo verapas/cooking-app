@@ -7,15 +7,19 @@
 #
 # Drei Services:
 #   1. mariadb  — Datenbank (persistentes Volume)
-#   2. migrator — Flyway-Container, migriert DB vor jedem App-Start,
+#   2. migrator — Flyway-Image aus GHCR (enthält db/migration/ der
+#                 Image-Revision), migriert DB vor jedem App-Start und
 #                 beendet sich danach (Einmal-Lauf)
 #   3. app      — SvelteKit-Runtime, startet erst nach erfolgreichem
 #                 Migrator-Lauf
 #
-# Watchtower-Anmerkung: Wenn Watchtower das App-Image updatet, muss es
-# ebenfalls den Migrator mit derselben Version anstoßen, sonst migriert
-# dieser mit veralteten SQL-Files. Daher: APP_TAG für beide Services
-# identisch setzen (Default :edge).
+# Migrationen sind im Migrator-IMAGE enthalten (kein Bind-Mount vom
+# Host!) — dadurch sind App-Revision und Schema-Version immer synchron.
+#
+# Watchtower-Anmerkung: App und Migrator müssen mit demselben APP_TAG
+# gezogen werden (Composed setzt beide über die Variable synchron).
+# Ein Update läuft dann so: Image-Pull → migrator läuft einmal mit den
+# neuen SQL-Files → App startet gegen das aktuelle Schema.
 # =====================================================================
 
 services:
@@ -40,19 +44,16 @@ services:
       start_period: 30s
 
   migrator:
-    # Flyway-Community-Image. Läuft einmal pro `docker compose up`,
-    # migriert alle anstehenden V*__*.sql aus db/migration/ und beendet
-    # sich dann. Die App wartet über depends_on auf seinen Erfolg.
-    image: flyway/flyway:11
+    # Eigenes Migrator-Image aus GHCR (Dockerfile-Target "migrator"):
+    # enthält die SQL-Files der Image-Revision. KEIN Bind-Mount vom Host
+    # mehr — dieser konnte veralten, während Watchtower nur das Image
+    # aktualisierte. OWNER/REPO wie beim app-Service ersetzen; APP_TAG
+    # hält beide synchron.
+    image: ghcr.io/OWNER/REPO-migrator:${APP_TAG:-edge}
     container_name: koch-migrator
     depends_on:
       mariadb:
         condition: service_healthy
-    # SQL-Files aus dem Repo (lokal unter db/migration/) einbinden.
-    # Pfad relativ zur compose.yaml → falls du compose an einen anderen
-    # Ort legst, passe ../db/migration entsprechend an.
-    volumes:
-      - ../db/migration:/flyway/sql:ro
     command: >
       -url=jdbc:mariadb://mariadb:3306/${DB_NAME:-cooking}
       -user=${DB_USER:-cooking}

@@ -1,12 +1,18 @@
 name: Docker Build & Publish
 
-# Baut das Docker-Image und pusht es nach GHCR — aber NUR, wenn die
+# Baut ZWEI Docker-Images und pusht sie nach GHCR — aber NUR, wenn die
 # Commit-Message den Marker [deploy] enthält. Ohne den Marker läuft
 # dieser Workflow gar nicht erst (nur ci.yml läuft immer).
 #
 # Beispiel:  git commit -m "feat: bild-upload fixen [deploy]"
 #
-# Tag-Strategie (via metadata-action):
+# Images (identische Tag-Strategie, damit sie synchron bleiben):
+#   1. ghcr.io/<owner>/<repo>           → App (adapter-node Runtime)
+#   2. ghcr.io/<owner>/<repo>-migrator  → Flyway + db/migration dieses
+#      Commits (kein Bind-Mount auf dem Server mehr — Schema-Version
+#      ist damit immer passend zur Image-Revision)
+#
+# Tag-Strategie (via metadata-action, für BEIDE Images):
 #   - main-Merge mit [deploy]  → :edge  und  :sha-<short>
 #   - Git-Tag v1.2.3           → :1.2.3, :1.2, :latest  (kommt nur über Tags)
 #
@@ -63,7 +69,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      - name: Build and push (app)
         uses: docker/build-push-action@v6
         with:
           push: true
@@ -72,6 +78,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # arm64 würde per QEMU emuliert und ist sehr langsam; nur amd64 bauen.
+          platforms: linux/amd64
+          context: .
+
+      # --- Migrator-Image: Flyway + SQL-Files aus diesem Commit ---------
+      # Eigener metadata-Schritt, damit die Tags identisch zur App sind
+      # (nur Image-Name unterscheidet sich: -migrator-Suffix).
+      - name: Docker metadata (migrator)
+        id: meta-migrator
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-migrator
+          tags: |
+            type=edge,branch=main
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern=latest
+
+      - name: Build and push (migrator)
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          target: migrator
+          tags: ${{ steps.meta-migrator.outputs.tags }}
+          labels: ${{ steps.meta-migrator.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           platforms: linux/amd64
           context: .
 

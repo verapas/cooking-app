@@ -13,7 +13,8 @@
 #
 # Was passiert beim ersten Start:
 #   1. mariadb hochfahren + auf healthy warten
-#   2. migrator läuft einmalig: legt Schema aus db/migration/ an
+#   2. migrator läuft einmalig: legt Schema an (SQL-Files aus dem lokal
+#      gebauten Migrator-Image — immer im Stand des Repos)
 #   3. app startet: beim ersten Request legt hooks.server.ts die Standard-
 #      Kategorien an (idempotent). Es gibt kein App-Login und keine Demo-Rezepte
 #      — Schutz erfolgt via Reverse Proxy, Rezepte legst du selbst an.
@@ -46,15 +47,18 @@ services:
       start_period: 20s
 
   migrator:
-    image: flyway/flyway:11
+    # Gleiches Prinzip wie in Produktion: Migrator-Image aus dem Dockerfile
+    # (Target "migrator") — SQL-Files sind im Image, kein Bind-Mount. Lokal
+    # wird es direkt aus dem Repo gebaut statt aus GHCR gezogen.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    image: koch-migrator:dev
     container_name: koch-migrator-dev
     depends_on:
       mariadb:
         condition: service_healthy
-    # SQL-Files aus dem Repo einbinden. Pfad relativ zu dieser compose.yaml
-    # (die im Root liegt) → ./db/migration.
-    volumes:
-      - ./db/migration:/flyway/sql:ro
     command: >
       -url=jdbc:mariadb://mariadb:3306/cooking
       -user=cooking

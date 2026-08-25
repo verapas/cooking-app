@@ -38,8 +38,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # svelte.config.js werden für `pnpm build` gebraucht, static/ für die
 # PWA-Icons (SvelteKit-Konvention für am Root ausgelieferte Assets —
 # NICHT public/, das ist die Vite-Konvention und wird von SvelteKit
-# ignoriert), src/ für die App, db/migration/ landet zwar nicht im
-# Build-Output, wird aber vom Flyway-Container benötigt (siehe Phase 4).
+# ignoriert), src/ für die App, db/migration/ für die migrator-Stage.
 COPY tsconfig.json svelte.config.js vite.config.ts ./
 COPY src src
 COPY static static
@@ -62,16 +61,28 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --prod --frozen-lockfile
 
 # =====================================================================
-# Stage 3: final  — Runtime-Image
+# Stage 3: migrator — Flyway mit den SQL-Files aus genau diesem Commit
+# =====================================================================
+# Eigenes Migrator-Image (CI pusht es als ghcr.io/<owner>/<repo>-migrator
+# mit demselben Tag wie die App). Die Migration-Files sind damit Teil der
+# Image-Revision — KEIN Bind-Mount vom Host mehr, der veralten kann
+# (genau das führte zum Auseinanderlaufen von App- und Schema-Version:
+# Watchtower aktualisiert Images, keine Host-Dateien).
+# Flyway liest default aus /flyway/sql → COPY reicht.
+FROM flyway/flyway:11 AS migrator
+COPY db/migration /flyway/sql
+
+# =====================================================================
+# Stage 4: final  — Runtime-Image
 # =====================================================================
 FROM base AS final
 WORKDIR /app
 
 # Runtime-Dependencies (ohne devDeps), der gebaute Adapter-node-Output
 # und die package.json (fürs Modul-Resolution). db/migration/ wird hier
-# NICHT gebraucht — die App migriert nicht selbst, der Flyway-Container
-# in der Compose übernimmt das. Aber package.json brauchen wir, damit
-# `node build` seine Deps findet.
+# NICHT gebraucht — die App migriert nicht selbst, das macht das eigene
+# Migrator-Image (Stage „migrator"). Aber package.json brauchen wir,
+# damit `node build` seine Deps findet.
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY package.json ./
@@ -98,10 +109,10 @@ USER node
 VOLUME ["/data"]
 EXPOSE 3000
 
-# Healthcheck ohne curl (nicht im slim-Image). /login ist in der
-# publicPaths-Liste in hooks.server.ts und liefert ohne Session 200.
-# process.exit: ok→0, non-ok→1, fetch-Fehler→1.
+# Healthcheck ohne curl (nicht im slim-Image). Prüft die Startseite
+# (SSR, liefert 200) — /login existiert nicht mehr. process.exit:
+# ok→0, non-ok→1, fetch-Fehler→1.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "build"]
