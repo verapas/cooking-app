@@ -1,6 +1,29 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { toggleDrawer } from '$lib/nav.svelte';
-  import Icon from './Icon.svelte';
+  import CategoryIcon from './CategoryIcon.svelte';
+  import type { Category } from '$lib/types';
+
+  let { categories = [] }: { categories?: Category[] } = $props();
+
+  // Zeigt den aktuell in der Navigation ausgewählten Punkt (wie NavDrawer).
+  // CategoryIcon rendert Icon-Registry-Keys UND Kategorie-Emojis — deshalb
+  // einheitlich für feste Nav-Icons und Kategorien nutzbar.
+  let current = $derived.by(() => {
+    const path = page.url.pathname;
+    if (path === '/favorites') return { label: 'Favoriten', icon: 'star' };
+    if (path === '/chat') return { label: 'Neues Rezept (KI)', icon: 'sparkles' };
+    if (path === '/settings/ai') return { label: 'KI-Einstellungen', icon: 'sparkles' };
+    if (path === '/settings/tools') return { label: 'Küchenutensilien', icon: 'pot' };
+    if (path.startsWith('/settings')) return { label: 'Einstellungen', icon: 'settings' };
+    if (path.startsWith('/category/')) {
+      const slug = decodeURIComponent(path.split('/')[2] ?? '');
+      const cat = categories.find((c) => c.slug === slug);
+      if (cat) return { label: cat.name, icon: cat.icon };
+    }
+    // Fallback (Startseite + Seiten ohne eigenen Nav-Punkt, z. B. Rezept-Detail)
+    return { label: 'Alle Rezepte', icon: 'home' };
+  });
 </script>
 
 <header class="topbar">
@@ -12,9 +35,10 @@
   >
     <span></span><span></span><span></span>
   </button>
-  <a href="/" class="title">
-    <span class="logo"><Icon name="pot" size={20} /></span> Koch-App
-  </a>
+  <span class="title">
+    <span class="logo"><CategoryIcon icon={current.icon} size={20} /></span>
+    {current.label}
+  </span>
 </header>
 
 <style>
@@ -49,6 +73,7 @@
     border: none;
     cursor: pointer;
     padding: 10px;
+    flex-shrink: 0;
   }
   .burger span {
     display: block;
@@ -61,13 +86,18 @@
     font-weight: 700;
     font-size: 1.05rem;
     color: var(--text);
-    text-decoration: none;
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    /* Lange Titel (Kategorie-/Seitennamen) sauber abschneiden statt umbrechen */
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .logo {
     color: var(--accent);
     display: inline-flex;
+    flex-shrink: 0;
   }
 </style>

@@ -75,7 +75,6 @@
 <main class="container settings">
   <a href="/settings" class="back-link"><Icon name="back" size={16} /> Einstellungen</a>
 
-  <h1><span class="h-ic"><Icon name="pot" size={28} /></span> Küchenutensilien</h1>
   <p class="dim">
     Hinterlege, welche Utensilien und Geräte in deiner Küche vorhanden sind
     (z.&nbsp;B. Ofen, Airfryer, Knethacken). Der KI-Assistent berücksichtigt
@@ -135,11 +134,9 @@
   .settings {
     padding-top: 16px;
   }
-  .settings h1 {
-    margin-top: 14px;
-  }
   .dim {
     color: var(--dim);
+    margin-top: 14px;
     margin-bottom: 16px;
   }
   .small {
@@ -235,11 +232,5 @@
   .chip-remove:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-  .h-ic {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-    color: var(--accent);
   }
 </style>

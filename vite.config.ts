@@ -9,10 +9,6 @@ export default defineConfig({
     SvelteKitPWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png', 'robots.txt'],
-      // Icon-Cache-Busting: Chrome/Android cachen Manifest-Icons hart per
-      // URL — gleiche URL + neuer Inhalt = altes Icon bleibt auf dem
-      // Homescreen. Bei jedem Icon-Wechsel ICON_VERSION hochzählen, damit
-      // die URLs neu sind und Chrome die Icons zwingend neu lädt.
       manifest: {
         name: 'Koch-App',
         short_name: 'Koch-App',
@@ -81,8 +77,6 @@ export default defineConfig({
             }
           },
           {
-            // Rezept-Detailseiten (NetworkFirst: frisch wenn online,
-            // letzter Stand aus dem Cache bei Timeout/Offline).
             urlPattern: /\/recipe\/.*/i,
             handler: 'NetworkFirst',
             options: {

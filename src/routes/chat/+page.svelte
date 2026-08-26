@@ -17,9 +17,6 @@
 
 <main class="container chat-page">
   <header class="chat-header">
-    <a href={data.mode === 'improve' && data.recipeId ? `/recipe/${data.recipeId}` : '/'} class="back-link">
-      <Icon name="back" size={16} /> Zurück
-    </a>
     <h1>
       <span class="h-ic"><Icon name="sparkles" size={24} /></span>
       {data.mode === 'improve'
