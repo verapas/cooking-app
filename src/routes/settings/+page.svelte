@@ -7,9 +7,6 @@
 </svelte:head>
 
 <main class="container settings">
-  <a href="/" class="back-link"><Icon name="back" size={16} /> Zurück</a>
-
-  <h1>Einstellungen</h1>
   <p class="dim">Wähle einen Bereich aus:</p>
 
   <div class="options">
@@ -36,9 +33,6 @@
 <style>
   .settings {
     padding-top: 16px;
-  }
-  .settings h1 {
-    margin-top: 14px;
   }
   .dim {
     color: var(--dim);

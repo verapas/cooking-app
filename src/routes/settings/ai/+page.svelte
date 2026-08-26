@@ -109,7 +109,6 @@
 <main class="container settings">
   <a href="/settings" class="back-link"><Icon name="back" size={16} /> Einstellungen</a>
 
-  <h1><span class="h-ic"><Icon name="sparkles" size={28} /></span> KI-Einstellungen</h1>
   <p class="dim">
     Konfiguriere den Zugang zum KI-Assistenten. Es funktioniert jeder
     OpenAI-kompatible Anbieter (z. B. z.ai, OpenRouter, OpenAI oder ein
@@ -190,11 +189,9 @@
   .settings {
     padding-top: 16px;
   }
-  .settings h1 {
-    margin-top: 14px;
-  }
   .dim {
     color: var(--dim);
+    margin-top: 14px;
     margin-bottom: 16px;
   }
   .small {
@@ -284,11 +281,5 @@
     margin-top: 16px;
     color: var(--warning, #e0a800);
     font-size: 0.9rem;
-  }
-  .h-ic {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-    color: var(--accent);
   }
 </style>

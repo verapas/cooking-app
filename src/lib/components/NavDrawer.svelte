@@ -61,11 +61,6 @@
       </div>
 
       <div class="divider"></div>
-      <a class="item" href="/search" class:active={page.url.pathname === '/search'}>
-        <span class="ic"><Icon name="search" size={20} /></span> Suche
-      </a>
-
-      <div class="divider"></div>
       <a class="item" href="/settings" class:active={page.url.pathname.startsWith('/settings')}>
         <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
       </a>

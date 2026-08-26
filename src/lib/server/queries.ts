@@ -160,10 +160,6 @@ export async function listRecipes(opts?: {
   });
 }
 
-export async function searchRecipes(q: string): Promise<RecipeListItem[]> {
-  return listRecipes({ q, limit: 50 });
-}
-
 export async function listFavorites(): Promise<RecipeListItem[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.*, c.name AS category_name, c.slug AS category_slug

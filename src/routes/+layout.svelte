@@ -9,7 +9,7 @@
 </script>
 
 <OfflineIndicator />
-<TopBar />
+<TopBar categories={data.categories} />
 <!--
   Vollheight-Flex-Layout: body ist display:flex/flex-direction:column.
   TopBar oben (nimmt ihren Platz + Safe-Area selbst), .app-scroll füllt
