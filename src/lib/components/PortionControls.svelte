@@ -49,11 +49,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    background: var(--surface);
+    /* sitzt in der großen Karte der Detailseite (surface) → eine Stufe dunkler */
+    background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 12px 14px;
-    margin-top: 14px;
   }
   .left {
     display: flex;

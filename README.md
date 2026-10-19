@@ -163,7 +163,7 @@ Netzwerk (die App sollte nie direkt aus dem Internet erreichbar sein).
 | GET | `/api/recipes/:id` | Rezept-Detail (mit Zutaten, Schritten + Tags) |
 | POST | `/api/recipes` | Rezept anlegen (Body darf `tags: string[]` enthalten) |
 | PUT | `/api/recipes/:id` | Rezept ändern (ersetzt auch die Tags) |
-| DELETE | `/api/recipes/:id` | Rezept löschen |
+| DELETE | `/api/recipes/:id[?scope=all]` | Rezept löschen (Variante allein, oder mit `scope=all` die ganze Versionen-Familie) |
 | GET | `/api/recipes/:id/versions` | Alle Versionen eines Rezepts |
 | POST | `/api/recipes/:id/favorite` | Favorit-Status umschalten |
 | POST | `/api/recipes/:id/pin` | Pin-Status umschalten („heute kochen") |

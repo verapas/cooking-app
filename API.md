@@ -373,7 +373,17 @@ Response:
 
 ```http
 DELETE /api/recipes/1
+DELETE /api/recipes/1?scope=all
 ```
+
+Query-Parameter:
+- *(kein `scope`)* — löscht genau dieses eine Rezept. Bei einer **Variante** bleibt
+  die Familie (Hauptrezept + andere Varianten) erhalten.
+- `scope=all` — löscht die **ganze Familie**: Hauptrezept und alle Varianten
+  (funktioniert mit Haupt- ODER Varianten-ID).
+
+Hinweis: Ein Hauptrezept mit Varianten kann niemals „nur sich selbst" löschen —
+die DB-Cascade (`fk_recipes_parent … ON DELETE CASCADE`) nimmt die Varianten mit.
 
 Response:
 ```json

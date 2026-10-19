@@ -581,6 +581,35 @@ export async function deleteRecipe(id: number): Promise<boolean> {
 }
 
 /**
+ * Löscht die ganze Rezept-FAMILIE: Hauptrezept plus aller Varianten
+ * (egal welche Familien-ID übergeben wird — Haupt- oder Varianten-ID).
+ * Wichtig: zwei getrennte Statements (erst Varianten, dann Hauptrezept) —
+ * ein combined DELETE (id = ? OR parent_recipe_id = ?) scheitert am
+ * selbst-referenzierenden FK mit „Can't find record" (InnoDB 1032).
+ */
+export async function deleteRecipeFamily(recipeId: number): Promise<boolean> {
+  const mainId = await getMainRecipeId(recipeId);
+  if (!mainId) return false;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM recipes WHERE parent_recipe_id = ?', [mainId]);
+    const [result] = await conn.execute<ResultSetHeader>(
+      'DELETE FROM recipes WHERE id = ?',
+      [mainId]
+    );
+    await conn.commit();
+    return result.affectedRows > 0;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
  * Legt Schritte + Zutaten für ein bestehendes Rezept an.
  * Läuft innerhalb der übergebenen Transaktion (conn), damit createRecipe/
  * updateRecipe atomar bleiben.
