@@ -3,6 +3,7 @@
   import type { PageData } from './$types';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { applyPinReorder } from '$lib/recipeOrder';
 
   let { data }: { data: PageData } = $props();
   let searchQuery = $state('');
@@ -71,6 +72,12 @@
   function handleSearch() {
     void runSearch();
   }
+
+  // Pin live umsetzen: Karte soll beim Klick direkt nach oben rutschen
+  // (Position wird sonst erst beim nächsten Laden vom Server sortiert).
+  function handlePinChange(id: number, pinned: boolean): void {
+    recipes = applyPinReorder(recipes, id, pinned);
+  }
 </script>
 
 <svelte:head>
@@ -98,7 +105,7 @@
 
   <section class="recipe-grid" aria-label="Rezepte">
     {#each recipes as recipe (recipe.id)}
-      <RecipeCard {recipe} />
+      <RecipeCard {recipe} onPinChange={handlePinChange} />
     {:else}
       <p class="dim">{activeQuery ? 'Nichts gefunden.' : 'Noch keine Rezepte vorhanden.'}</p>
     {/each}

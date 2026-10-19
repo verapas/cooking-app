@@ -3,7 +3,14 @@
   import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
 
-  let { recipe }: { recipe: RecipeListItem } = $props();
+  let {
+    recipe,
+    onPinChange
+  }: {
+    recipe: RecipeListItem;
+    /** Optionale Rückmeldung an die Liste: Karte live umsortieren. */
+    onPinChange?: (id: number, pinned: boolean) => void;
+  } = $props();
 
   let totalMin = $derived(
     (recipe.prep_time_min ?? 0) + (recipe.cook_time_min ?? 0)
@@ -45,6 +52,7 @@
     const newPinned = !isPinned;
     pinOptimistic = true;
     isPinned = newPinned;
+    onPinChange?.(recipe.id, newPinned);
 
     try {
       const res = await fetch(`/api/recipes/${recipe.id}/pin`, {
@@ -54,9 +62,11 @@
 
       if (!res.ok) {
         isPinned = !newPinned;
+        onPinChange?.(recipe.id, !newPinned);
       }
     } catch {
       isPinned = !newPinned;
+      onPinChange?.(recipe.id, !newPinned);
     } finally {
       pinOptimistic = false;
     }
@@ -122,15 +132,52 @@
     transform: scale(0.98);
   }
 
-  /* Angepinnt („heute kochen"): orange Rahmen + sanfter Orangeton im Body.
-     --accent ist das App-Orange aus app.css (#ff7a3d); die rgba-Werte
-     entsprechen ihm für transparente Verläufe. */
+  /* Angepinnt („heute kochen"): volle Breite über alle Grid-Spalten,
+     horizontal.layoutet (Bild links, Inhalt rechts) — prägnanter als
+     die normalen Karten. Orange wie immer aus --accent (#ff7a3d aus
+     app.css); die rgba-Werte entsprechen ihm für Verläufe. */
   .recipecard.pinned {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: stretch;
     border-color: var(--accent);
+    /* Buttons an der Karte verankern (rechts), nicht am Bild (links) */
+    position: relative;
+    /* Feste Höhe, unabhängig vom Bildformat: Basis ist die Höhe einer
+       normalen Karte (Thumb-Anteil = Spaltenbreite × 3/4; 2 Spalten:
+       Grid = 100vw − 32px Padding − 14px Gap → Faktor 3/8, plus Body),
+       davon 2/3 — die Pin-Karte bleibt eine Zeile niedriger. */
+    height: calc(((100vw - 46px) * 3 / 8 + 106px) * 2 / 3);
+  }
+
+  @media (min-width: 560px) {
+    .recipecard.pinned {
+      /* 3 Spalten: Spaltenbreite = (Grid − 2×14px Gap)/3 → Thumb-Höhe
+         = Grid/4, plus Body; ebenfalls 2/3. Grid auf 608px gedeckelt. */
+      height: calc(((min(100vw - 32px, 608px) - 28px) / 4 + 106px) * 2 / 3);
+    }
+  }
+
+  .recipecard.pinned .thumb {
+    flex: 0 0 40%;
+    aspect-ratio: auto;
+    /* static, damit Pin/Stern-Buttons (absolute) zur Karte anklebern
+       statt zum Thumb — sie rutschen so an den rechten Kartenrand. */
+    position: static;
   }
 
   .recipecard.pinned .body {
-    background: linear-gradient(180deg, rgba(255, 122, 61, 0.14), rgba(255, 122, 61, 0.04) 55%, transparent);
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 14px 16px;
+    background: linear-gradient(90deg, rgba(255, 122, 61, 0.16), rgba(255, 122, 61, 0.04) 60%, transparent);
+  }
+
+  .recipecard.pinned .title {
+    font-size: 1.12rem;
   }
 
   .thumb {
