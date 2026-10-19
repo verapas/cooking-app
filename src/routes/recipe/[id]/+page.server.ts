@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { getEffectiveImageUrl, getMainRecipeId, getRecipe, listRecipeVersions } from '$lib/server/queries';
+import { getEffectiveImageUrl, getMainRecipeId, getRecipe, listRecipeVersions, listTags } from '$lib/server/queries';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -10,6 +10,8 @@ export const load: PageServerLoad = async ({ params }) => {
   if (!mainRecipeId) throw error(500, 'Ungültiger Rezeptstatus');
   const versions = await listRecipeVersions(mainRecipeId);
   const imageUrl = await getEffectiveImageUrl(recipe.id);
+  // Alle Tags (mit ID) — für verlinkbare Tag-Chips auf dem Rezept.
+  const tags = await listTags();
 
-  return { recipe, versions, imageUrl };
+  return { recipe, versions, imageUrl, tags };
 };

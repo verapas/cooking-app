@@ -87,6 +87,17 @@ function kitchenToolsHint(tools: KitchenTool[]): string {
 }
 
 /**
+ * Baut die vorhandenen Tags zu einem Hinweis für den Finalize-Prompt:
+ * Die KI soll für "tags" bevorzugt die etablierten Begriffe verwenden
+ * (statt ständig neue Synonyme zu erfinden). Leere Liste → leerer String.
+ */
+function tagsHint(tagNames: string[]): string {
+  if (tagNames.length === 0) return '';
+  const list = tagNames.join(', ');
+  return `Vorhandene Tags in der App: ${list}.`;
+}
+
+/**
  * Beschreibt das JSON-Schema, das finalizeRecipe erzwingt. Das entspricht
  * exakt RecipeInput/StepInput/IngredientInput (src/lib/types.ts), gekürzt
  * um die internen Felder (id, recipe_id, …).
@@ -101,6 +112,7 @@ export const RECIPE_JSON_SCHEMA_DESCRIPTION = `Ein JSON-Objekt mit genau dieser 
   "prep_time_min": "number | null — Vorbereitungszeit in Minuten (optional)",
   "cook_time_min": "number | null — Koch-/Backzeit in Minuten (optional)",
   "source": "string | null — Quelle, z. B. 'KI generiert' (optional)",
+  "tags": ["string | null — kurze Querschnitts-Merkmale des Rezepts, max. 3 (z. B. 'vegetarisch', 'schnell', 'für Gäste'). Klein schreiben. NICHT Kategorie, Küche oder Zutaten wiederholen — nur Eigenschaften, die über Kategorien hinweg zum Filtern nützlich sind."],
   "steps": [
     { "order": number (1-basiert), "instruction": "string", "duration_sec": number | null }
   ],
@@ -184,6 +196,7 @@ Wenn die Person zufrieden ist, wird sie das Rezept separat finalisieren lassen �
 function finalizeSystemPrompt(
   categories: Category[],
   tools: KitchenTool[],
+  tagNames: string[],
   contextRecipe?: RecipeWithDetails
 ): string {
   const contextBlock = contextRecipe
@@ -192,12 +205,15 @@ function finalizeSystemPrompt(
   const toolsBlock = kitchenToolsHint(tools)
     ? `\n\n${kitchenToolsHint(tools)} Formuliere die Schritte so, dass sie mit dieser Ausstattung machbar sind.`
     : '';
+  const tagsBlock = tagsHint(tagNames)
+    ? `\n\n${tagsHint(tagNames)} Verwende für "tags" bevorzugt diese vorhandenen Begriffe, wenn einer passt — nur wenn wirklich nichts passt, darfst du max. einen neuen, passenden Begriff erfinden.`
+    : '';
 
   return `Du bist ein Rezept-Generator in einer deutschen Rezept-App. Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt aus — keinen Erklärungstext, kein Markdown, keine Code-Einfassung. Antworte nicht im Gespräch, stelle keine Rückfragen, bestätige nichts. Liefere nur das fertige Rezept als JSON.
 
 ${RECIPE_JSON_SCHEMA_DESCRIPTION}
 
-${categoryHint(categories)}${contextBlock}${toolsBlock}
+${categoryHint(categories)}${contextBlock}${toolsBlock}${tagsBlock}
 
 Regeln:
 - "quantity" MUSS numerisch sein (number), niemals ein String. Verwende 0 oder null für "nach Geschmack".
@@ -280,16 +296,18 @@ export async function* streamChat(
  * @param messages   bisheriger Chat-Verlauf (user/assistant)
  * @param categories verfügbare Kategorien (für category_slug)
  * @param tools      Küchenutensilien der Person (Prompt-Kontext)
+ * @param tagNames   vorhandene Tag-Namen (Prompt-Kontext für "tags")
  * @param context    optionales Kontext-Rezept (Modus 'improve')
  */
 export async function finalizeRecipe(
   messages: ChatMessage[],
   categories: Category[],
   tools: KitchenTool[],
+  tagNames: string[],
   contextRecipe?: RecipeWithDetails
 ): Promise<RecipeInput> {
   const { client, model } = await createClient();
-  const systemPrompt = finalizeSystemPrompt(categories, tools, contextRecipe);
+  const systemPrompt = finalizeSystemPrompt(categories, tools, tagNames, contextRecipe);
   const completion = await client.chat.completions.create({
     model,
     // JSON-Modus erzwingen — weitreichend unterstützt (auch GLM).
@@ -360,6 +378,22 @@ export function validateRecipeInput(raw: unknown): RecipeInput {
   }
   if (typeof obj.version_name === 'string' && obj.version_name.trim()) {
     recipe.version_name = obj.version_name.trim().slice(0, 80);
+  }
+  // Tags: Strings trimmen, deduplizieren (case-insensitiv), max. 10.
+  if (Array.isArray(obj.tags)) {
+    const seen = new Set<string>();
+    const tagNames: string[] = [];
+    for (const t of obj.tags) {
+      if (typeof t !== 'string') continue;
+      const name = t.trim().slice(0, 40);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tagNames.push(name);
+      if (tagNames.length >= 10) break;
+    }
+    if (tagNames.length > 0) recipe.tags = tagNames;
   }
 
   if (Array.isArray(obj.steps)) {

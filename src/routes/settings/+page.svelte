@@ -27,6 +27,15 @@
       </span>
       <span class="go"><Icon name="forward" size={18} /></span>
     </a>
+
+    <a href="/settings/tags" class="option">
+      <span class="ic"><Icon name="tag" size={24} /></span>
+      <span class="txt">
+        <span class="title">Tags</span>
+        <span class="sub">Querschnitts-Merkmale wie „vegetarisch" oder „schnell" — zum Filtern der Rezepte</span>
+      </span>
+      <span class="go"><Icon name="forward" size={18} /></span>
+    </a>
   </div>
 </main>
 
