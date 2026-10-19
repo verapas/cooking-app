@@ -21,35 +21,90 @@
   let activeQuery = $state('');
   let searching = $state(false);
 
-  async function runSearch(): Promise<void> {
-    const q = searchQuery.trim();
-    if (!q) {
-      // Leeres Suchfeld + aktive Suche absenden → zurück zur Gesamtliste
-      if (activeQuery) clearSearch();
-      return;
+  // Tag-Filter: Mehrfachauswahl mit UND-Semantik (Server prüft die
+  // Rezept-Familie — Hauptrezept + Varianten). Initial aus ?tag_ids=.
+  let selectedTagIds = $state<number[]>(untrack(() => [...data.initialTagIds]));
+  let tagFilterOpen = $state(false);
+
+  // Popover schließen bei Klick außerhalb
+  $effect(() => {
+    if (!tagFilterOpen) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.tag-filter')) tagFilterOpen = false;
     }
-    if (searching) return;
-    searching = true;
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  });
+
+  /**
+   * Holt die Liste passend zu Suche + Tag-Filter (beide optional,
+   * kombinierbar). Ohne aktive Filter → Gesamtliste mit „Mehr laden".
+   */
+  async function fetchFiltered(): Promise<void> {
+    const params = new URLSearchParams();
+    if (activeQuery) params.set('q', activeQuery);
+    if (selectedTagIds.length > 0) params.set('tag_ids', selectedTagIds.join(','));
+    updateFilterUrl();
     try {
-      const res = await fetch(`/api/recipes?q=${encodeURIComponent(q)}`);
+      const res = await fetch(
+        params.toString() ? `/api/recipes?${params}` : `/api/recipes?limit=${PAGE_SIZE}`
+      );
       if (res.ok) {
         recipes = await res.json();
-        activeQuery = q;
-        hasMore = false;
+        hasMore =
+          params.toString() === '' && recipes.length === PAGE_SIZE;
       }
     } catch {
       // Netzwerkfehler: Liste unverändert, User kann es erneut versuchen.
+    }
+  }
+
+  /** Hält ?tag_ids= im URL aktuell (Reload/Teilen behält den Filter). */
+  function updateFilterUrl(): void {
+    const url = new URL(window.location.href);
+    if (selectedTagIds.length > 0) {
+      url.searchParams.set('tag_ids', selectedTagIds.join(','));
+    } else {
+      url.searchParams.delete('tag_ids');
+    }
+    history.replaceState({}, '', url);
+  }
+
+  async function runSearch(): Promise<void> {
+    const q = searchQuery.trim();
+    if (!q && !activeQuery) return;
+    if (searching) return;
+    searching = true;
+    try {
+      activeQuery = q; // leer = Suche zurücksetzen, Tag-Filter bleibt
+      await fetchFiltered();
     } finally {
       searching = false;
     }
   }
 
-  function clearSearch(): void {
+  async function clearSearch(): Promise<void> {
     searchQuery = '';
     activeQuery = '';
-    recipes = [...data.recipes];
-    hasMore = data.recipes.length === PAGE_SIZE;
+    await fetchFiltered();
   }
+
+  function toggleTag(id: number): void {
+    selectedTagIds = selectedTagIds.includes(id)
+      ? selectedTagIds.filter((t) => t !== id)
+      : [...selectedTagIds, id];
+    void fetchFiltered();
+  }
+
+  function resetTagFilter(): void {
+    selectedTagIds = [];
+    void fetchFiltered();
+  }
+
+  let activeTagNames = $derived(
+    selectedTagIds.map((id) => data.tags.find((t) => t.id === id)?.name ?? '?')
+  );
 
   async function loadMore() {
     if (loadingMore || !hasMore) return;
@@ -87,6 +142,50 @@
 <main class="container">
   <header class="page-head">
     <form class="search-inline" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
+      <div class="tag-filter">
+        <button
+          type="button"
+          class="btn-icon-search tag-filter-btn"
+          class:filter-active={selectedTagIds.length > 0}
+          onclick={() => (tagFilterOpen = !tagFilterOpen)}
+          aria-label="Nach Tags filtern"
+          aria-expanded={tagFilterOpen}
+        >
+          <Icon name="tag" size={20} />
+          {#if selectedTagIds.length > 0}
+            <span class="filter-count">{selectedTagIds.length}</span>
+          {/if}
+        </button>
+        {#if tagFilterOpen}
+          <div class="tag-popover" role="dialog" aria-label="Tag-Filter">
+            {#if data.tags.length === 0}
+              <p class="tag-empty">
+                Noch keine Tags vorhanden. Setze sie im Rezept-Formular oder
+                unter Einstellungen → Tags.
+              </p>
+            {:else}
+              <div class="tag-options">
+                {#each data.tags as tag (tag.id)}
+                  <button
+                    type="button"
+                    class="tag-option"
+                    class:selected={selectedTagIds.includes(tag.id)}
+                    aria-pressed={selectedTagIds.includes(tag.id)}
+                    onclick={() => toggleTag(tag.id)}
+                  >
+                    {tag.name} <span class="tag-option-count">{tag.count}</span>
+                  </button>
+                {/each}
+              </div>
+              {#if selectedTagIds.length > 0}
+                <button type="button" class="tag-reset" onclick={resetTagFilter}>
+                  Filter zurücksetzen
+                </button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+      </div>
       <input
         bind:value={searchQuery}
         placeholder="Rezept suchen..."
@@ -99,15 +198,18 @@
     </form>
   </header>
 
-  {#if activeQuery}
-    <p class="result-info">{recipes.length} Treffer für „{activeQuery}"</p>
+  {#if activeQuery || selectedTagIds.length > 0}
+    <p class="result-info">
+      {recipes.length} Treffer{#if activeQuery} für „{activeQuery}"{/if}
+      {#if selectedTagIds.length > 0}&nbsp;· Tags: {activeTagNames.join(' + ')}{/if}
+    </p>
   {/if}
 
   <section class="recipe-grid" aria-label="Rezepte">
     {#each recipes as recipe (recipe.id)}
       <RecipeCard {recipe} onPinChange={handlePinChange} />
     {:else}
-      <p class="dim">{activeQuery ? 'Nichts gefunden.' : 'Noch keine Rezepte vorhanden.'}</p>
+      <p class="dim">{activeQuery || selectedTagIds.length > 0 ? 'Nichts gefunden.' : 'Noch keine Rezepte vorhanden.'}</p>
     {/each}
   </section>
 
@@ -168,6 +270,128 @@
   .btn-icon-search:hover {
     border-color: var(--accent);
     color: var(--accent);
+  }
+
+  /* Tag-Filter: Button links neben der Suche + darunter aufklappendes Popover */
+  .tag-filter {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .tag-filter-btn {
+    position: relative;
+  }
+
+  .tag-filter-btn.filter-active {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .filter-count {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .tag-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: min(340px, calc(100vw - 32px));
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    padding: 12px;
+    z-index: 30;
+  }
+
+  .tag-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .tag-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+
+  .tag-option:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .tag-option.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .tag-option-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    font-size: 0.74rem;
+    font-weight: 600;
+  }
+
+  .tag-option.selected .tag-option-count {
+    background: rgba(26, 14, 6, 0.25);
+    color: var(--accent-contrast);
+  }
+
+  .tag-reset {
+    margin-top: 10px;
+    width: 100%;
+    min-height: 38px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+
+  .tag-reset:hover {
+    color: var(--danger);
+  }
+
+  .tag-empty {
+    margin: 4px 2px;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    line-height: 1.4;
   }
   .load-more {
     display: flex;

@@ -7,7 +7,7 @@
 // Strings. is_favorite kommt bereits als echtes Boolean aus MariaDB.
 
 import { pool, normalizeDates, RECIPE_DATES } from './db';
-import type { RowDataPacket, ResultSetHeader, PoolConnection } from 'mysql2/promise';
+import type { RowDataPacket, ResultSetHeader, PoolConnection, Pool } from 'mysql2/promise';
 import type {
   Category,
   CategoryInput,
@@ -18,7 +18,9 @@ import type {
   RecipeListItem,
   RecipeWithDetails,
   RecipeVersion,
-  Step
+  Step,
+  Tag,
+  TagWithCount
 } from '$lib/types';
 
 // ---------- Kategorien ----------
@@ -119,11 +121,130 @@ export async function deleteKitchenTool(id: number): Promise<boolean> {
   return result.affectedRows > 0;
 }
 
+// ---------- Tags ----------
+
+/**
+ * Alle Tags mit Anzahl passender Rezept-FAMILIEN — Varianten zählen zum
+ * Hauptrezept (COALESCE(parent, id)), passend zum Familien-Filter in
+ * listRecipes. Für Filter-Popover und Einstellungen.
+ */
+export async function listTags(): Promise<TagWithCount[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT t.id, t.name, COUNT(DISTINCT COALESCE(r.parent_recipe_id, r.id)) AS count
+     FROM tags t
+     LEFT JOIN recipe_tags rt ON rt.tag_id = t.id
+     LEFT JOIN recipes r ON r.id = rt.recipe_id
+     GROUP BY t.id, t.name
+     ORDER BY t.name ASC`
+  );
+  return rows as unknown as TagWithCount[];
+}
+
+/** Tag anlegen. Duplikate (case-insensitiv, dank Collation) werden still
+ *  aktualisiert → idempotent wie createKitchenTool. */
+export async function createTag(name: string): Promise<number> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `INSERT INTO tags (name) VALUES (?)
+     ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+    [name]
+  );
+  if (result.insertId > 0) return result.insertId;
+  // Duplikat: insertId ist 0 → vorhandene ID nachschlagen.
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id FROM tags WHERE name = ?',
+    [name]
+  );
+  return (rows[0] as { id: number }).id;
+}
+
+export async function renameTag(id: number, name: string): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    'UPDATE tags SET name = ? WHERE id = ?',
+    [name, id]
+  );
+  return result.affectedRows > 0;
+}
+
+/** Tag löschen — Verknüpfungen fallen per ON DELETE CASCADE mit weg. */
+export async function deleteTag(id: number): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    'DELETE FROM tags WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
+/** Tag-Namen eines Rezepts (für getRecipe/Edit-Formular). */
+export async function getRecipeTags(recipeId: number): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT t.name FROM tags t
+     JOIN recipe_tags rt ON rt.tag_id = t.id
+     WHERE rt.recipe_id = ?
+     ORDER BY t.name ASC`,
+    [recipeId]
+  );
+  return rows.map((r) => (r as { name: string }).name);
+}
+
+/**
+ * Normalisiert eine Tag-Liste aus API/KI-Input: trimmen, leere raus,
+ * case-insensitiv deduplizieren, auf 40 Zeichen / max. 10 kappen.
+ */
+export function normalizeTagNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const name = item.trim().slice(0, 40);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+/**
+ * Setzt die Tags eines Rezepts vollständig: Get-or-Create je Name, dann
+ * Links erneuern (Delete + Insert). Läuft INNERHALB der Transaktion von
+ * createRecipe/updateRecipe (conn) — sonst mit pool.
+ */
+async function syncRecipeTags(
+  conn: PoolConnection | Pool,
+  recipeId: number,
+  names: string[]
+): Promise<void> {
+  await conn.execute('DELETE FROM recipe_tags WHERE recipe_id = ?', [recipeId]);
+  for (const name of names) {
+    const [result] = await conn.execute<ResultSetHeader>(
+      `INSERT INTO tags (name) VALUES (?)
+       ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+      [name]
+    );
+    let tagId = result.insertId;
+    if (tagId === 0) {
+      const [rows] = await conn.query<RowDataPacket[]>(
+        'SELECT id FROM tags WHERE name = ?',
+        [name]
+      );
+      tagId = (rows[0] as { id: number }).id;
+    }
+    await conn.execute<ResultSetHeader>(
+      'INSERT IGNORE INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)',
+      [recipeId, tagId]
+    );
+  }
+}
+
 // ---------- Rezepte: Listen ----------
 
 export async function listRecipes(opts?: {
   categoryId?: number;
   q?: string;
+  tagIds?: number[];
   limit?: number;
   offset?: number;
 }): Promise<RecipeListItem[]> {
@@ -136,6 +257,17 @@ export async function listRecipes(opts?: {
   if (opts?.q) {
     where.push('(r.title LIKE ? OR r.description LIKE ?)');
     params.push(`%${opts.q}%`, `%${opts.q}%`);
+  }
+  // Tag-Filter mit UND-Semantik über die Rezept-FAMILIE: pro gewähltem
+  // Tag muss es IRGENDEINE Version (Hauptrezept oder Variante) mit dem
+  // Tag geben — die Liste zeigt weiterhin nur Hauptrezept-Karten.
+  for (const tagId of opts?.tagIds ?? []) {
+    where.push(`EXISTS (
+      SELECT 1 FROM recipe_tags rt
+      JOIN recipes f ON f.id = rt.recipe_id
+      WHERE rt.tag_id = ? AND (f.id = r.id OR f.parent_recipe_id = r.id)
+    )`);
+    params.push(tagId);
   }
   const clause = `WHERE ${where.join(' AND ')}`;
   const limit = opts?.limit ?? 200;
@@ -156,7 +288,8 @@ export async function listRecipes(opts?: {
     return {
       ...normalized,
       is_favorite: Boolean(normalized.is_favorite),
-      is_pinned: Boolean(normalized.is_pinned)
+      is_pinned: Boolean(normalized.is_pinned),
+      tags: [] as string[] // Listen-Views zeigen keine Tags (nur Detail/Edit)
     } as unknown as RecipeListItem;
   });
 }
@@ -175,7 +308,8 @@ export async function listFavorites(): Promise<RecipeListItem[]> {
     return {
       ...normalized,
       is_favorite: Boolean(normalized.is_favorite),
-      is_pinned: Boolean(normalized.is_pinned)
+      is_pinned: Boolean(normalized.is_pinned),
+      tags: [] as string[] // Listen-Views zeigen keine Tags (nur Detail/Edit)
     } as unknown as RecipeListItem;
   });
 }
@@ -309,11 +443,13 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
     'SELECT * FROM steps WHERE recipe_id = ? ORDER BY `order` ASC, id ASC',
     [id]
   );
+  const tagNames = await getRecipeTags(id);
 
   return {
-    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite' | 'is_pinned'>),
+    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite' | 'is_pinned' | 'tags'>),
     is_favorite: Boolean(is_favorite),
     is_pinned: Boolean(is_pinned),
+    tags: tagNames,
     category:
       c_id != null
         ? { id: c_id, name: c_name!, slug: c_slug!, icon: c_icon }
@@ -381,6 +517,7 @@ export async function createRecipe(input: RecipeInput): Promise<number> {
     }
 
     await insertChildren(conn, recipeId, input);
+    await syncRecipeTags(conn, recipeId, input.tags ?? []);
     await conn.commit();
     return recipeId;
   } catch (err) {
@@ -424,6 +561,7 @@ export async function updateRecipe(id: number, input: RecipeInput): Promise<bool
     await conn.execute('DELETE FROM steps WHERE recipe_id = ?', [id]);
     await conn.execute('DELETE FROM ingredients WHERE recipe_id = ?', [id]);
     await insertChildren(conn, id, input);
+    await syncRecipeTags(conn, id, input.tags ?? []);
     await conn.commit();
     return true;
   } catch (err) {

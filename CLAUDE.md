@@ -47,6 +47,7 @@ src/lib/components/    # UI-Komponenten
   OfflineIndicator.svelte # Online/Offline-Statusanzeige
   ChatPanel.svelte     # KI-Chat (Streaming, Finalize-Vorschau, Speichern)
 src/lib/portion.ts     # Portionen-Skalierung + Mengen-/Dauer-Formatierung
+src/lib/recipeOrder.ts # Pin-Live-Reorder in Listen (Client, s. Rezeptliste)
 src/lib/sound.ts       # Web-Audio-Bleep + Vibration (für den Stepper-Timer)
 src/lib/wakeLock.ts    # Screen Wake Lock (Bildschirm beim Kochen anlassen)
 src/lib/nav.svelte.ts  # Drawer-Open-State (universal reactivity)
@@ -57,7 +58,8 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /favorites/          # Favoriten-Seite
   /offline/            # Offline-Fallback-Seite
   /chat/               # KI-Chat (?recipe=<id> = improve-Modus)
-  /settings/           # KI-Einstellungen (API-Key, Modell, Base-URL)
+  /settings/           # KI-Einstellungen (API-Key, Modell, Base-URL) +
+                       # Küchenutensilien (/tools) + Tag-Verwaltung (/tags)
   /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>)
   /recipe/[id]/edit/   # Rezept-Bearbeitung
   /api/                # REST-API-Endpunkte
@@ -104,6 +106,15 @@ vite.config.ts         # Vite + PWA-Konfiguration
   und werden in der RecipeCard orange hervorgehoben (`--accent`). Mehrere Pins
   erlaubt; ein Pin bleibt bis zum manuellen Lösen. `pinned_at` ist in
   `RECIPE_DATES` (db.ts) registriert (DATETIME → ISO-String).
+- **Tags** (V8): `tags` + `recipe_tags` (n:m) — Querschnitts-Merkmale über
+  Kategorien hinweg („vegetarisch", „schnell"). `tags.name` ist UNIQUE mit
+  case-insensitiver Collation → Get-or-Create per Upsert (wie kitchen_tools).
+  Tags sind Teil von `RecipeInput` (`tags: string[]`) und werden beim
+  createRecipe/updateRecipe mit verknüpft (Delete-all-Reinsert in derselben
+  Transaktion). **Filter-Semantik**: `GET /api/recipes?tag_ids=1,2` prüft die
+  Rezept-FAMILIE — für jeden gewählten Tag genügt irgendeine Version
+  (Hauptrezept ODER Variante). Verwaltung: Einstellungen → Tags; die KI setzt
+  beim Finalize Tags (`tagsHint` im Prompt bevorzugt vorhandene Begriffe).
 - **Auth-Tabellen entfernt** (V4): `users`/`sessions` wurden mit `V4__drop_auth.sql`
   gedroppt — die App hat kein eigenes Login mehr (Schutz via Reverse Proxy).
 - **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
@@ -141,6 +152,10 @@ Die Anbindung ist **provider-unabhängig**: jeder OpenAI-kompatible Anbieter fun
   - Original überschreiben → `PUT /api/recipes/[id]`
   - Neue Version → `POST /api/recipes` mit `parent_recipe_id` + `version_name`
   `validateRecipeInput` in `ai.ts` prüft/normalisiert das KI-JSON vor dem Speichern.
+- **Tags**: Das Finalize-JSON darf `"tags": string[]` enthalten. Der Finalize-
+  Prompt bekommt die vorhandenen Tags als Kontext (`tagsHint` in `ai.ts`) und
+  weist die KI an, etablierte Begriffe wiederzuverwenden statt Synonyme zu
+  erfinden; neue Namen werden beim Speichern automatisch angelegt.
 - **Verlauf nicht persistiert**: Der Chat-Verlauf lebt nur im Client-State (`ChatPanel.svelte`).
   Nur das fertige Rezept wird gespeichert.
 - **Abhängigkeit**: `openai` (npm). Da jeder Provider OpenAI-kompatibel ist, reicht in
@@ -198,10 +213,10 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `DELETE /api/categories/[id]` - Kategorie löschen
 
 ### Rezepte
-- `GET /api/recipes[?category_id=...&q=...]` - Rezepte suchen/listen
-- `POST /api/recipes` - Rezept erstellen
-- `GET /api/recipes/[id]` - Rezept-Detail
-- `PUT /api/recipes/[id]` - Rezept bearbeiten
+- `GET /api/recipes[?category_id=...&q=...&tag_ids=1,2&limit&offset]` - Rezepte suchen/listen
+- `POST /api/recipes` - Rezept erstellen (Body darf `tags: string[]` enthalten)
+- `GET /api/recipes/[id]` - Rezept-Detail (inkl. `tags`)
+- `PUT /api/recipes/[id]` - Rezept bearbeiten (ersetzt auch die Tags)
 - `DELETE /api/recipes/[id]` - Rezept löschen
 - `GET /api/recipes/[id]/versions` - Alle Versionen eines Rezepts
 - `POST /api/recipes/[id]/favorite` - Favorit-Status umschalten
@@ -210,6 +225,12 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 
 ### Favoriten
 - `GET /api/favorites` - Alle favorisierten Rezepte
+
+### Tags
+- `GET /api/tags` - Alle Tags + Familien-Zähler
+- `POST /api/tags` - Tag erstellen (idempotent)
+- `PUT /api/tags/[id]` - Tag umbenennen
+- `DELETE /api/tags/[id]` - Tag löschen (Links fallen per CASCADE)
 
 ### Bilder
 - `GET /images/[file]` - Bild ausliefern

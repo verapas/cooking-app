@@ -16,6 +16,11 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 - 🔢 **Portionen-Umschalter**: alle Mengen skalieren live mit
 - 🔄 **Rezept-Versionen**: Varianten eines Rezepts (z. B. „Schnelle Version")
 - ⭐ **Favoriten**: Rezepte markieren und gesammelt abrufen
+- 📌 **Pins** („heute kochen"): angepinnte Rezepte stehen zuoberst und
+  werden orange hervorgehoben — mehrere Pins möglich, live beim Antippen
+- 🏷️ **Tags**: Querschnitts-Merkmale („vegetarisch", „schnell", …) — im
+  Rezept-Formular oder per KI setzen, in der Übersicht kombinierbar filtern
+  (UND-Semantik über Hauptrezept + Varianten), Verwaltung in den Einstellungen
 - 🖼️ **Bild-Upload**: pro Rezept ein Bild (JPG/PNG/WebP/GIF, bis 20 MB)
 - ✨ **KI-Assistent**: Rezepte per Chat mit einer KI planen und anlegen
   (beliebiger OpenAI-kompatibler Anbieter, z. B. **z.ai**, OpenRouter,
@@ -154,18 +159,23 @@ Netzwerk (die App sollte nie direkt aus dem Internet erreichbar sein).
 
 | Methode | Route | Beschreibung |
 |---|---|---|
-| GET | `/api/recipes?category_id=&q=` | Rezept-Liste (mit Filter/Suche) |
-| GET | `/api/recipes/:id` | Rezept-Detail (mit Zutaten + Schritten) |
-| POST | `/api/recipes` | Rezept anlegen |
-| PUT | `/api/recipes/:id` | Rezept ändern |
+| GET | `/api/recipes?category_id=&q=&tag_ids=1,2` | Rezept-Liste (Filter/Suche/Tags, UND über Rezept-Familie) |
+| GET | `/api/recipes/:id` | Rezept-Detail (mit Zutaten, Schritten + Tags) |
+| POST | `/api/recipes` | Rezept anlegen (Body darf `tags: string[]` enthalten) |
+| PUT | `/api/recipes/:id` | Rezept ändern (ersetzt auch die Tags) |
 | DELETE | `/api/recipes/:id` | Rezept löschen |
 | GET | `/api/recipes/:id/versions` | Alle Versionen eines Rezepts |
 | POST | `/api/recipes/:id/favorite` | Favorit-Status umschalten |
+| POST | `/api/recipes/:id/pin` | Pin-Status umschalten („heute kochen") |
 | POST | `/api/recipes/:id/image` | Bild hochladen (multipart, bis 20 MB) |
 | GET | `/api/categories` | Alle Kategorien |
 | POST | `/api/categories` | Kategorie anlegen |
 | PUT | `/api/categories/:id` | Kategorie ändern |
 | DELETE | `/api/categories/:id` | Kategorie löschen |
+| GET | `/api/tags` | Alle Tags (+ Familien-Zähler) |
+| POST | `/api/tags` | Tag anlegen (idempotent) |
+| PUT | `/api/tags/:id` | Tag umbenennen |
+| DELETE | `/api/tags/:id` | Tag löschen (Verknüpfungen fallen mit weg) |
 
 ### KI-Assistent (provider-unabhängig)
 

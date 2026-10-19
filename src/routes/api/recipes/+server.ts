@@ -1,12 +1,19 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createRecipe, listRecipes } from '$lib/server/queries';
+import { createRecipe, listRecipes, normalizeTagNames } from '$lib/server/queries';
 import type { RecipeInput } from '$lib/types';
 
-// GET /api/recipes[?category_id=…&q=…&limit=…&offset=…]  (offen, kein Token nötig)
+// GET /api/recipes[?category_id=…&q=…&tag_ids=1,2&limit=…&offset=…]  (offen)
 export const GET: RequestHandler = async ({ url }) => {
   const categoryId = url.searchParams.get('category_id');
   const q = url.searchParams.get('q') ?? undefined;
+  // Tag-Filter (UND über die Rezept-Familie): "tag_ids=1,2"
+  const tagIdsRaw = url.searchParams.get('tag_ids');
+  const tagIds =
+    tagIdsRaw
+      ?.split(',')
+      .map((t) => Number(t.trim()))
+      .filter((t) => Number.isInteger(t) && t > 0) ?? [];
   // Limit/Offset für „Mehr laden": defensiv parsen und clamping
   // (Limit 1–100, Offset ≥ 0), damit keine Blödsinn-Werte an die DB gehen.
   const limitRaw = url.searchParams.get('limit');
@@ -17,6 +24,7 @@ export const GET: RequestHandler = async ({ url }) => {
   const recipes = await listRecipes({
     categoryId: categoryId ? Number(categoryId) : undefined,
     q: q && q.trim() ? q.trim() : undefined,
+    tagIds: tagIds.length > 0 ? tagIds : undefined,
     limit,
     offset
   });
@@ -37,6 +45,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body.parent_recipe_id && !body.version_name) {
     throw error(422, 'Feld "version_name" ist erforderlich für Varianten');
   }
+  body.tags = normalizeTagNames(body.tags);
   const id = await createRecipe(body);
   return json({ id }, { status: 201 });
 };

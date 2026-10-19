@@ -14,6 +14,17 @@ export interface KitchenTool {
   name: string;
 }
 
+/** Querschnitts-Merkmal für Rezepte (z. B. „vegetarisch", „schnell"). */
+export interface Tag {
+  id: number;
+  name: string;
+}
+
+/** Tag mit Anzahl passender Rezept-Familien (Filter/Einstellungen). */
+export interface TagWithCount extends Tag {
+  count: number;
+}
+
 export interface Recipe {
   id: number;
   title: string;
@@ -28,6 +39,8 @@ export interface Recipe {
   /** Pin („heute kochen"): steht in Listen zuoberst, orange hervorgehoben. */
   is_pinned: boolean;
   pinned_at: string | null;
+  /** Tag-Namen dieses Rezepts (Hauptrezept und Varianten können eigene haben). */
+  tags: string[];
   parent_recipe_id: number | null;
   version_name: string | null;
   created_at: string;
@@ -101,6 +114,8 @@ export interface RecipeInput {
   parent_recipe_id?: number | null;
   /** Für Varianten: Name der Version (z.B. "Übernacht garen") */
   version_name?: string | null;
+  /** Tag-Namen — werden per Get-or-Create angelegt und verknüpft. */
+  tags?: string[];
   ingredients?: IngredientInput[];
   steps?: StepInput[];
 }

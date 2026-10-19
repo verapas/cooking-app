@@ -162,6 +162,21 @@
   <h1>{recipe.title}</h1>
   {#if recipe.description}<p class="desc">{recipe.description}</p>{/if}
 
+  {#if recipe.tags.length > 0}
+    <div class="recipe-tags" aria-label="Tags">
+      {#each recipe.tags as tagName (tagName)}
+        {@const tagEntry = data.tags.find((t) => t.name === tagName)}
+        {#if tagEntry}
+          <a class="recipe-tag" href="/?tag_ids={tagEntry.id}" title={`Nach "${tagName}" filtern`}>
+            <Icon name="tag" size={12} /> {tagName}
+          </a>
+        {:else}
+          <span class="recipe-tag"><Icon name="tag" size={12} /> {tagName}</span>
+        {/if}
+      {/each}
+    </div>
+  {/if}
+
   {#if uploadError}<p class="err">{uploadError}</p>{/if}
 
   <div class="toolbar">
@@ -335,6 +350,28 @@
   }
   .desc {
     color: var(--text-dim);
+  }
+  .recipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 14px;
+  }
+  .recipe-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    text-decoration: none;
+  }
+  a.recipe-tag:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .version-trigger {
     display: inline-flex;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { untrack } from 'svelte';
   import type { PageData } from './$types';
   import ImageUpload from '$lib/components/ImageUpload.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -18,6 +19,41 @@
 
   let steps = $state([...data.recipe.steps].sort((a, b) => a.order - b.order));
   let ingredients = $state([...data.recipe.ingredients].sort((a, b) => a.sort_order - b.sort_order));
+
+  // Tags: Chip-Input — Enter/Komma fügt hinzu, Vorschläge aus vorhanden Tags.
+  let tags = $state<string[]>(untrack(() => [...data.recipe.tags]));
+  let tagInput = $state('');
+  let tagSuggestions = $derived.by(() => {
+    const q = tagInput.trim().toLowerCase();
+    return data.tags
+      .map((t) => t.name)
+      .filter(
+        (name) =>
+          (q === '' || name.toLowerCase().includes(q)) &&
+          !tags.some((sel) => sel.toLowerCase() === name.toLowerCase())
+      )
+      .slice(0, 6);
+  });
+
+  function addTag(name: string) {
+    const clean = name.trim().slice(0, 40);
+    if (!clean) return;
+    if (!tags.some((t) => t.toLowerCase() === clean.toLowerCase())) {
+      tags = [...tags, clean];
+    }
+    tagInput = '';
+  }
+
+  function onTagKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ',') {
+      // Enter/Komma soll hier NICHT das Formular absenden, sondern den
+      // Tag anlegen (bzw. bei leerem Feld nichts tun).
+      e.preventDefault();
+      if (tagInput.trim()) addTag(tagInput);
+    } else if (e.key === 'Backspace' && tagInput === '' && tags.length > 0) {
+      tags = tags.slice(0, -1);
+    }
+  }
 
   let hasVersions = $derived(data.versions.length > 1);
   let categories = $derived(data.categories);
@@ -135,6 +171,7 @@
         image_url: imageUrl,
         source: source.trim() || null,
         version_name: !isMainVersion && versionName.trim() ? versionName.trim() : null,
+        tags,
         steps: stepInputs,
         ingredients: ingredientInputs
       };
@@ -220,6 +257,41 @@
             <option value={cat.id}>{cat.name}</option>
           {/each}
         </select>
+      </div>
+
+      <div class="form-group">
+        <label for="tags">Tags</label>
+        <div class="tag-input">
+          {#each tags as tag (tag)}
+            <span class="tag-chip">
+              {tag}
+              <button
+                type="button"
+                class="tag-chip-x"
+                onclick={() => (tags = tags.filter((t) => t !== tag))}
+                aria-label={`Tag "${tag}" entfernen`}
+              ><Icon name="close" size={12} /></button>
+            </span>
+          {/each}
+          <input
+            id="tags"
+            type="text"
+            bind:value={tagInput}
+            onkeydown={onTagKeydown}
+            placeholder={tags.length === 0 ? 'z. B. vegetarisch, schnell (Enter zum Hinzufügen)' : ''}
+            maxlength="40"
+            autocomplete="off"
+          />
+        </div>
+        {#if tagSuggestions.length > 0}
+          <div class="tag-suggestions" aria-label="Tag-Vorschläge">
+            {#each tagSuggestions as suggestion (suggestion)}
+              <button type="button" class="tag-suggest" onclick={() => addTag(suggestion)}>
+                {suggestion}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <div class="form-row">
@@ -443,6 +515,91 @@
   .form-group select:focus {
     outline: none;
     border-color: var(--accent);
+  }
+
+  /* Tag-Chip-Input: Chips + freies Textfeld in einer Umrandung */
+  .tag-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    min-height: var(--tap);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    cursor: text;
+  }
+
+  .tag-input:focus-within {
+    border-color: var(--accent);
+  }
+
+  .tag-input input {
+    flex: 1;
+    min-width: 120px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 1rem;
+    padding: 4px 0;
+    min-height: 0;
+  }
+
+  .tag-input input:focus {
+    outline: none;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .tag-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  .tag-chip-x:hover {
+    background: rgba(255, 92, 92, 0.15);
+    color: var(--danger);
+  }
+
+  .tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag-suggest {
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  .tag-suggest:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    border-style: solid;
   }
 
   .form-row {

@@ -4,51 +4,7 @@ Base URL: `http://localhost:5173/api`
 
 ## Authentifizierung
 
-Alle schreibenden Endpoints (POST, PUT, DELETE) erfordern eine gültige Session. Die Session wird über ein HttpOnly Cookie verwaltet.
-
-### Login
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "dein-passwort"
-}
-```
-
-Response:
-```json
-{
-  "success": true
-}
-```
-
-Setzt ein `session` Cookie (HttpOnly, 7 Tage gültig).
-
-### Logout
-
-```http
-POST /api/auth/logout
-```
-
-Löscht das Session-Cookie.
-
-### Verify Session
-
-```http
-GET /api/auth/verify
-```
-
-Response:
-```json
-{
-  "ok": true
-}
-```
-
-Gibt `401` zurück, wenn keine gültige Session vorhanden.
+Es gibt **keine App-Level-Authentifizierung** mehr (Auth-Tabellen wurden mit `V4__drop_auth.sql` entfernt). Alle Endpunkte sind auf App-Ebene offen — der Zugriffsschutz liegt vollständig auf Infrastrukturebene (Reverse Proxy / VPN, siehe `INFRA.md`). Der Container sollte nie direkt aus dem Internet erreichbar sein.
 
 ## Kategorien
 
@@ -145,7 +101,21 @@ Hauptrezepte werden in der Hauptliste angezeigt. Varianten werden nur über den 
 GET /api/recipes
 GET /api/recipes?category_id=1
 GET /api/recipes?q=Tomate
+GET /api/recipes?tag_ids=3,7
+GET /api/recipes?limit=30&offset=30
 ```
+
+Query-Parameter (alle optional, kombinierbar):
+- `category_id` — nach Kategorie filtern
+- `q` — Freitextsuche in Titel und Beschreibung
+- `tag_ids` — Komma-separierte Tag-IDs, **UND-Verknüpft über die
+  Rezept-Familie**: Ein Hauptrezept erscheint im Ergebnis, wenn für
+  *jeden* gewählten Tag *irgendeine* Version (Hauptrezept oder Variante)
+  das Tag trägt.
+- `limit` / `offset` — Pagination für „Mehr laden" (Limit 1–100)
+
+Sortierung: Pins zuerst (`is_pinned DESC, pinned_at DESC`), dann Favoriten,
+dann Titel.
 
 Response:
 ```json
@@ -155,7 +125,7 @@ Response:
     "title": "Tomatensuppe",
     "description": "Lecker",
     "category_id": 1,
-    "category_name": "Suppen",
+    "category_name": "Supen",
     "category_slug": "suppen",
     "base_servings": 2,
     "prep_time_min": 5,
@@ -163,11 +133,18 @@ Response:
     "image_url": "/images/recipe-1-1234567890.jpg",
     "source": null,
     "is_favorite": false,
+    "is_pinned": false,
+    "pinned_at": null,
+    "tags": [],
     "created_at": "2024-01-01T12:00:00.000Z",
     "updated_at": "2024-01-01T12:00:00.000Z"
   }
 ]
 ```
+
+**Hinweis:** Listen-Endpoints liefern `tags` immer als leeres Array — Tags
+werden nur im Rezept-Detail (`GET /api/recipes/[id]`) und im Edit-Formular
+geladen.
 
 ### Rezept erstellen (Hauptrezept)
 
@@ -182,6 +159,7 @@ Content-Type: application/json
   "base_servings": 2,
   "prep_time_min": 5,
   "cook_time_min": 20,
+  "tags": ["vegetarisch", "schnell"],
   "steps": [
     {
       "order": 1,
@@ -228,7 +206,9 @@ Response:
 
 Status: `201 Created`
 
-### Rezept-Variante erstellen
+**Hinweis zu `tags`:** Namen werden per Get-or-Create angelegt (case-insensitiv
+dedupliziert über die DB-Collation, max. 40 Zeichen, max. 10 pro Rezept).
+Fehlt das Feld beim `PUT`, werden alle Tags des Rezepts entfernt.
 
 ```http
 POST /api/recipes
@@ -304,6 +284,10 @@ Response:
   "cook_time_min": 20,
   "image_url": "/images/recipe-1-1234567890.jpg",
   "source": null,
+  "is_favorite": false,
+  "is_pinned": false,
+  "pinned_at": null,
+  "tags": ["vegetarisch"],
   "created_at": "2024-01-01T12:00:00.000Z",
   "updated_at": "2024-01-01T12:00:00.000Z",
   "steps": [
@@ -346,7 +330,8 @@ Content-Type: application/json
   "title": "Tomatensuppe Deluxe",
   "description": "Noch leckerer",
   "category_slug": "suppen",
-  "base_servings": 4
+  "base_servings": 4,
+  "tags": ["vegetarisch", "schnell"]
 }
 ```
 
@@ -356,6 +341,9 @@ Response:
   "id": 1
 }
 ```
+
+**Hinweis:** `PUT` ersetzt das Rezept vollständig (Steps/Zutaten/Tags werden
+erneuert) — immer das komplette Objekt schicken, wie es der Client kennt.
 
 ### Rezept-Varianten auflisten
 
@@ -394,7 +382,7 @@ Response:
 }
 ```
 
-## Favoriten
+## Favoriten & Pins
 
 ### Favoriten auflisten
 
@@ -439,6 +427,90 @@ Response:
 
 Schaltet den Favorit-Status eines Rezepts um (aus/an).
 
+### Pin-Status umschalten („heute kochen")
+
+```http
+POST /api/recipes/1/pin
+```
+
+Response:
+```json
+{
+  "ok": true
+}
+```
+
+Schaltet den Pin um: Anpinnen setzt `is_pinned = 1` und `pinned_at = NOW()`,
+Lösen setzt beides zurück. Angepinnte Rezept stehen in allen Listen zuoberst
+(vor den Favoriten) und werden orange hervorgehoben.
+
+## Tags
+
+Querschnitts-Merkmale über Kategorien hinweg (z. B. „vegetarisch", „schnell").
+Verwaltet unter Einstellungen → Tags; beim Rezept-Speichern werden neue Namen
+automatisch angelegt (Get-or-Create, case-insensitiv dedupliziert).
+
+### Alle Tags auflisten
+
+```http
+GET /api/tags
+```
+
+Response:
+```json
+[
+  { "id": 1, "name": "schnell", "count": 3 },
+  { "id": 2, "name": "vegetarisch", "count": 5 }
+]
+```
+
+`count` = Anzahl Rezept-**Familien** (Hauptrezept + Varianten zusammengezählt),
+passend zur Filter-Semantik von `GET /api/recipes?tag_ids=`.
+
+### Tag erstellen
+
+```http
+POST /api/tags
+Content-Type: application/json
+
+{ "name": "vegetarisch" }
+```
+
+Response:
+```json
+{ "id": 2, "name": "vegetarisch" }
+```
+
+Status: `201 Created`. Duplikate (case-insensitiv) sind idempotent — der
+vorhandene Tag wird zurückgegeben.
+
+### Tag umbenennen
+
+```http
+PUT /api/tags/2
+Content-Type: application/json
+
+{ "name": "vegan" }
+```
+
+Response:
+```json
+{ "id": 2, "name": "vegan" }
+```
+
+### Tag löschen
+
+```http
+DELETE /api/tags/2
+```
+
+Response:
+```json
+{ "ok": true }
+```
+
+Verknüpfungen zu Rezepten fallen per `ON DELETE CASCADE` mit weg.
+
 ## Bilder
 
 ### Bild hochladen
@@ -455,7 +527,7 @@ Content-Type: image/jpeg
 ------WebKitFormBoundary--
 ```
 
-Erlaubte Formate: JPG, PNG, WebP, GIF (max. 5 MB)
+Erlaubte Formate: JPG, PNG, WebP, GIF (max. 20 MB)
 
 Response:
 ```json
@@ -494,10 +566,23 @@ Löscht automatisch das alte Bild, wenn vorhanden.
   image_url: string | null;
   source: string | null;
   is_favorite: boolean;
+  is_pinned: boolean;       // „heute kochen" — steht in Listen zuoberst
+  pinned_at: string | null;
+  tags: string[];           // Tag-Namen (nur im Detail gefüllt, Listen: [])
   parent_recipe_id: number | null;
   version_name: string | null;
   created_at: string;
   updated_at: string;
+}
+```
+
+### Tag
+
+```typescript
+{
+  id: number;
+  name: string;
+  count?: number; // nur von GET /api/tags: Anzahl Rezept-Familien
 }
 ```
 
@@ -540,9 +625,8 @@ Löscht automatisch das alte Bild, wenn vorhanden.
 ## Fehlercodes
 
 - `400 Bad Request` - Ungültiges JSON oder fehlende Felder
-- `401 Unauthorized` - Keine gültige Session
 - `404 Not Found` - Ressource nicht gefunden
-- `413 Payload Too Large` - Bild zu groß (max. 5 MB)
+- `413 Payload Too Large` - Bild zu groß (max. 20 MB)
 - `415 Unsupported Media Type` - Falsches Bildformat
 - `422 Unprocessable Entity` - Validierungsfehler
 - `503 Service Unavailable` - Server nicht konfiguriert
@@ -554,4 +638,5 @@ Löscht automatisch das alte Bild, wenn vorhanden.
 - `step_order` ordnet Zutaten einem Schritt zu (1-basiert nach `order`)
 - `duration_sec` aktiviert den Timer im Stepper
 - Kategorie kann per `category_id` oder `category_slug` angegeben werden
-- Session läuft nach 7 Tagen ab (kann in `src/lib/components/NavDrawer.svelte` angepasst werden)
+- Tags können beliebiger `string[]`-Namen sein — Validierung/Grenzen siehe
+  „Rezept erstellen" oben (40 Zeichen, max. 10)
