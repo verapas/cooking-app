@@ -99,6 +99,11 @@ vite.config.ts         # Vite + PWA-Konfiguration
 - **Rezept-Versioning**: `recipes.parent_recipe_id` (→ Hauptrezept) + `recipes.version_name`
   (z. B. "Schnelle Version", "Vegetarisch").
 - **Favoriten**: `recipes.is_favorite` (0/1, wird per API getoggelt).
+- **Pins** (V7): `recipes.is_pinned` + `recipes.pinned_at` — „heute kochen".
+  Angepinnte Rezepte stehen zuoberst (vor Favoriten, zuletzt angepinnt zuerst)
+  und werden in der RecipeCard orange hervorgehoben (`--accent`). Mehrere Pins
+  erlaubt; ein Pin bleibt bis zum manuellen Lösen. `pinned_at` ist in
+  `RECIPE_DATES` (db.ts) registriert (DATETIME → ISO-String).
 - **Auth-Tabellen entfernt** (V4): `users`/`sessions` wurden mit `V4__drop_auth.sql`
   gedroppt — die App hat kein eigenes Login mehr (Schutz via Reverse Proxy).
 - **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
@@ -200,6 +205,7 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `DELETE /api/recipes/[id]` - Rezept löschen
 - `GET /api/recipes/[id]/versions` - Alle Versionen eines Rezepts
 - `POST /api/recipes/[id]/favorite` - Favorit-Status umschalten
+- `POST /api/recipes/[id]/pin` - Pin-Status umschalten (setzt/leert `pinned_at`)
 - `POST /api/recipes/[id]/image` - Bild hochladen (multipart)
 
 ### Favoriten

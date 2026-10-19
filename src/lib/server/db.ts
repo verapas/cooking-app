@@ -58,7 +58,7 @@ function normalizeDates(row: AnyRow, dateColumns: string[]): AnyRow {
   return out;
 }
 
-const RECIPE_DATES = ['created_at', 'updated_at'];
+const RECIPE_DATES = ['created_at', 'updated_at', 'pinned_at'];
 
 // Re-Exports für queries.ts und API-Routen
 export type { Pool, RowDataPacket, ResultSetHeader };

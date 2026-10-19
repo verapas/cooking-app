@@ -146,7 +146,7 @@ export async function listRecipes(opts?: {
      FROM recipes r
      LEFT JOIN categories c ON c.id = r.category_id
      ${clause}
-     ORDER BY r.is_favorite DESC, r.title ASC, r.created_at DESC
+     ORDER BY r.is_pinned DESC, r.pinned_at DESC, r.is_favorite DESC, r.title ASC, r.created_at DESC
      LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
@@ -155,7 +155,8 @@ export async function listRecipes(opts?: {
     const normalized = normalizeDates(r as unknown as Record<string, unknown>, RECIPE_DATES);
     return {
       ...normalized,
-      is_favorite: Boolean(normalized.is_favorite)
+      is_favorite: Boolean(normalized.is_favorite),
+      is_pinned: Boolean(normalized.is_pinned)
     } as unknown as RecipeListItem;
   });
 }
@@ -166,14 +167,15 @@ export async function listFavorites(): Promise<RecipeListItem[]> {
      FROM recipes r
      LEFT JOIN categories c ON c.id = r.category_id
      WHERE r.is_favorite = 1 AND r.parent_recipe_id IS NULL
-     ORDER BY r.created_at DESC`
+     ORDER BY r.is_pinned DESC, r.pinned_at DESC, r.created_at DESC`
   );
 
   return rows.map((r) => {
     const normalized = normalizeDates(r as unknown as Record<string, unknown>, RECIPE_DATES);
     return {
       ...normalized,
-      is_favorite: Boolean(normalized.is_favorite)
+      is_favorite: Boolean(normalized.is_favorite),
+      is_pinned: Boolean(normalized.is_pinned)
     } as unknown as RecipeListItem;
   });
 }
@@ -189,6 +191,28 @@ export async function toggleFavorite(id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
     'UPDATE recipes SET is_favorite = ? WHERE id = ?',
     [newFavorite, id]
+  );
+  return result.affectedRows > 0;
+}
+
+/** Pin umschalten: beim Anpinnen pinned_at setzen (zuoberst sortiert), beim Lösen auf NULL. */
+export async function togglePin(id: number): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT is_pinned FROM recipes WHERE id = ?',
+    [id]
+  );
+  if (rows.length === 0) return false;
+
+  if (rows[0].is_pinned) {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE recipes SET is_pinned = 0, pinned_at = NULL WHERE id = ?',
+      [id]
+    );
+    return result.affectedRows > 0;
+  }
+  const [result] = await pool.execute<ResultSetHeader>(
+    'UPDATE recipes SET is_pinned = 1, pinned_at = NOW() WHERE id = ?',
+    [id]
   );
   return result.affectedRows > 0;
 }
@@ -270,9 +294,10 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
     c_slug: string | null;
     c_icon: string | null;
     is_favorite: number | boolean;
+    is_pinned: number | boolean;
   };
 
-  const { c_id, c_name, c_slug, c_icon, is_favorite, ...rest } = recipe;
+  const { c_id, c_name, c_slug, c_icon, is_favorite, is_pinned, ...rest } = recipe;
   const normalizedRest = normalizeDates(rest as Record<string, unknown>, RECIPE_DATES);
 
   const [ingredientRows] = await pool.query<RowDataPacket[]>(
@@ -286,8 +311,9 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
   );
 
   return {
-    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite'>),
+    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite' | 'is_pinned'>),
     is_favorite: Boolean(is_favorite),
+    is_pinned: Boolean(is_pinned),
     category:
       c_id != null
         ? { id: c_id, name: c_name!, slug: c_slug!, icon: c_icon }
