@@ -25,6 +25,9 @@ export interface Recipe {
   image_url: string | null;
   source: string | null;
   is_favorite: boolean;
+  /** Pin („heute kochen"): steht in Listen zuoberst, orange hervorgehoben. */
+  is_pinned: boolean;
+  pinned_at: string | null;
   parent_recipe_id: number | null;
   version_name: string | null;
   created_at: string;

@@ -11,11 +11,13 @@
 
   let isFavorite = $state(untrack(() => recipe.is_favorite));
   let isOptimistic = $state(false);
+  let isPinned = $state(untrack(() => recipe.is_pinned));
+  let pinOptimistic = $state(false);
 
   async function toggleFavorite(e: Event) {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const newFavorite = !isFavorite;
     isOptimistic = true;
     isFavorite = newFavorite;
@@ -36,6 +38,30 @@
     }
   }
 
+  async function togglePin(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const newPinned = !isPinned;
+    pinOptimistic = true;
+    isPinned = newPinned;
+
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/pin`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (!res.ok) {
+        isPinned = !newPinned;
+      }
+    } catch {
+      isPinned = !newPinned;
+    } finally {
+      pinOptimistic = false;
+    }
+  }
+
   function formatTime(m: number): string {
     if (m <= 0) return '';
     if (m >= 60) {
@@ -47,13 +73,21 @@
   }
 </script>
 
-<a class="card recipecard" href="/recipe/{recipe.id}">
+<a class="card recipecard" class:pinned={isPinned} href="/recipe/{recipe.id}">
   <div class="thumb">
     {#if recipe.image_url}
       <img src={recipe.image_url} alt="" loading="lazy" />
     {:else}
       <div class="thumb-icon" aria-hidden="true"><Icon name="plate" size={56} /></div>
     {/if}
+    <button
+      class="pin-btn"
+      class:pin-active={isPinned}
+      aria-label={isPinned ? 'Pin lösen' : 'Rezept anpinnen'}
+      onclick={togglePin}
+    >
+      <Icon name="pin" size={18} filled={isPinned} />
+    </button>
     <button
       class="fav-btn"
       class:fav-active={isFavorite}
@@ -88,6 +122,17 @@
     transform: scale(0.98);
   }
 
+  /* Angepinnt („heute kochen"): orange Rahmen + sanfter Orangeton im Body.
+     --accent ist das App-Orange aus app.css (#ff7a3d); die rgba-Werte
+     entsprechen ihm für transparente Verläufe. */
+  .recipecard.pinned {
+    border-color: var(--accent);
+  }
+
+  .recipecard.pinned .body {
+    background: linear-gradient(180deg, rgba(255, 122, 61, 0.14), rgba(255, 122, 61, 0.04) 55%, transparent);
+  }
+
   .thumb {
     position: relative;
     aspect-ratio: 4 / 3;
@@ -112,10 +157,10 @@
     justify-content: center;
   }
 
-  .fav-btn {
+  .fav-btn,
+  .pin-btn {
     position: absolute;
     top: 8px;
-    right: 8px;
     background: rgba(15, 12, 8, 0.85);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -131,10 +176,25 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 
-  .fav-btn:hover {
+  .fav-btn:hover,
+  .pin-btn:hover {
     transform: scale(1.05);
     background: rgba(15, 12, 8, 0.95);
     border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .fav-btn:active,
+  .pin-btn:active {
+    transform: scale(0.95);
+  }
+
+  .fav-btn {
+    right: 8px;
+  }
+
+  .pin-btn {
+    /* Direkt links neben dem Favoriten-Stern (32px Button + 8px Abstand) */
+    right: 48px;
   }
 
   .fav-btn.fav-active {
@@ -142,8 +202,9 @@
     border-color: rgba(245, 158, 11, 0.3);
   }
 
-  .fav-btn:active {
-    transform: scale(0.95);
+  .pin-btn.pin-active {
+    color: var(--accent);
+    border-color: rgba(255, 122, 61, 0.45);
   }
 
   .body {
