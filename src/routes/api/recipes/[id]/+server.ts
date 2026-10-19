@@ -1,6 +1,12 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { deleteRecipe, getRecipe, updateRecipe, normalizeTagNames } from '$lib/server/queries';
+import {
+  deleteRecipe,
+  deleteRecipeFamily,
+  getRecipe,
+  updateRecipe,
+  normalizeTagNames
+} from '$lib/server/queries';
 import type { RecipeInput } from '$lib/types';
 
 // GET /api/recipes/[id]  (offen)
@@ -26,9 +32,19 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   return json({ id });
 };
 
-// DELETE /api/recipes/[id]  (Token-geschützt)
-export const DELETE: RequestHandler = async ({ params }) => {
-  const ok = await deleteRecipe(Number(params.id));
+// DELETE /api/recipes/[id][?scope=all]  (Schutz über Reverse Proxy)
+//   scope fehlt/"version" → nur genau DIES Rezept löschen (bei einer Variante
+//   bleibt die Familie erhalten; bei einem Hauptrezept mit Varianten würden
+//   diese zwar per DB-Cascade mitfallen — die UI bietet dafür scope=all an).
+//   scope=all → ganze Familie löschen (Hauptrezept + alle Varianten).
+export const DELETE: RequestHandler = async ({ params, url }) => {
+  const id = Number(params.id);
+  if (isNaN(id)) throw error(400, 'Ungültige Rezept-ID');
+
+  const ok =
+    url.searchParams.get('scope') === 'all'
+      ? await deleteRecipeFamily(id)
+      : await deleteRecipe(id);
   if (!ok) throw error(404, 'Rezept nicht gefunden');
   return json({ ok: true });
 };
