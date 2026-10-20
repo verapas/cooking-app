@@ -4,7 +4,7 @@
 // ID-Token, validiert es (JWKS/iss/aud), updatet den Benutzer, legt die
 // Session an und leitet zum ursprünglich angeforderten Pfad weiter.
 
-import { error, redirect } from '@sveltejs/kit';
+import { error, isRedirect, redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
   OAUTH_REDIRECT_COOKIE,
@@ -56,6 +56,9 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
     redirect(303, returnTo);
   } catch (err) {
+    // SvelteKit-Redirects sind Exceptions — weiterwerfen, sonst schluckt
+    // sie dieser catch und aus dem erfolgreichen Login wird eine 502-Seite.
+    if (isRedirect(err)) throw err;
     console.error('OIDC-Callback fehlgeschlagen:', err);
     error(502, 'Anmeldung fehlgeschlagen — bitte erneut versuchen.');
   }
