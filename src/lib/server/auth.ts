@@ -120,7 +120,10 @@ export async function exchangeCode(
     body
   });
   if (!res.ok) {
-    throw new Error(`Token-Endpunkt antwortete mit ${res.status}`);
+    // Keycloak liefert Details als JSON-Body (invalid_client, invalid_grant, …)
+    // — mitloggen, sonst ist die Ursache nur eine nackte Status-Nummer.
+    const body = await res.text().catch(() => '');
+    throw new Error(`Token-Endpunkt antwortete mit ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
   }
   const data = (await res.json()) as { id_token?: unknown };
   if (typeof data.id_token !== 'string') {
