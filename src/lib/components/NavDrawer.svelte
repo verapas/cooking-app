@@ -9,6 +9,7 @@
   let { categories, user = null }: { categories: Category[]; user?: SessionUser | null } = $props();
 
   // Anzeigename: name || username || email (siehe SessionUser in types.ts).
+  // Anzeigename: name || username || email (siehe SessionUser in types.ts).
   const displayName = $derived(user?.name || user?.username || user?.email || null);
 
   // Nach jeder Navigation den Drawer schließen.
@@ -80,11 +81,14 @@
           </span>
         </div>
         <!-- Kompletter Logout (App-Session + Keycloak-SSO): POST-Formular,
-             der Server antwortet mit Redirect zur end_session-URL. Der
-             Button schließt den Drawer manuell — ein Formular-Submit
-             navigiert vollständg, löst aber kein afterNavigate aus. -->
+             der Server antwortet mit Redirect zur end_session-URL.
+             WICHTIG (bewiesen per Browser-Test): KEIN onclick={closeDrawer} hier!
+             Ein Click-Handler, der den Drawer (und damit das Formular) aus
+             dem DOM entfernt, verhindert die Default-Aktion des Klicks —
+             der Submit wird nie ausgelöst. Die Navigation nach dem POST
+             lädt die App ohnehin neu (Drawer dann geschlossen). -->
         <form method="POST" action="/auth/logout">
-          <button class="item logout" onclick={closeDrawer}>
+          <button class="item logout">
             <span class="ic"><Icon name="logout" size={20} /></span> Abmelden
           </button>
         </form>
