@@ -40,6 +40,8 @@ und `pnpm dev` laufen lassen.
 src/lib/server/        # NUR server-seitig (nie vom Client importieren!)
   db.ts                # mysql2-Pool (Singleton) + Date-Helper (alle async)
   queries.ts           # alle Query-/Mutations-Funktionen (alle async)
+  auth.ts              # OIDC/Keycloak-Login + DB-Sessions (users/sessions,
+                       # Rolling-TTL, ID-Token-Validierung via jose/JWKS)
   settings.ts          # Key/Value-Settings (settings-Tabelle) + KI-Komfort-Helper
   ai.ts                # KI-Integration (provider-unabhängig): Streaming + Finalize
 src/lib/components/    # UI-Komponenten
@@ -62,10 +64,14 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
                        # Küchenutensilien (/tools) + Tag-Verwaltung (/tags)
   /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>)
   /recipe/[id]/edit/   # Rezept-Bearbeitung
+  /auth/               # OIDC-Login: /auth/login (Redirect zu Keycloak),
+                       # /auth/callback (Code↔Token, Session anlegen),
+                       # /auth/logout (komplett: App-Session + Keycloak-SSO)
   /api/                # REST-API-Endpunkte
   /images/             # Bild-Auslieferung
-src/hooks.server.ts    # Kategorie-Seeder beim ersten Request + Pass-Through
-                       # (kein App-Login — Schutz via Reverse Proxy)
+src/hooks.server.ts    # Kategorie-Seeder beim ersten Request + Login-Schutz:
+                       # Session prüfen → locals.user; ohne Session Redirect
+                       # zu /auth/login (Seiten) bzw. 401-JSON (APIs)
 db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — landen
                        # im Migrator-Image (Dockerfile-Target "migrator"), nicht
                        # per Bind-Mount auf dem Server; die App selbst migriert nie
@@ -81,11 +87,19 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Niemals `$lib/server/*` in Client-Komponenten importieren.
 - **Alle Query-/Auth-Funktionen sind async** (mysql2-Pool). Aufrufe in Load-Funktionen
   und API-Routen müssen `await` sein — sonst erhält man Promises statt Daten.
-- **Kein App-Login mehr**: Die App besitzt keine eigene Authentifizierung. Der
-  Zugriffsschutz liegt vollständig auf Infrastrukturebene (Reverse Proxy / VPN /
-  internes Netz) — der Container sollte nie direkt aus dem Internet erreichbar sein.
-  `hooks.server.ts` ist ein reiner Pass-Through; alle Schreib-APIs sind ohne
-  App-Level-Schutz. Das war eine bewusste Entscheidung.
+- **App-Login via OIDC/Keycloak** (V9): Authorization Code Flow mit PKCE gegen
+  Keycloak, implementiert in `src/lib/server/auth.ts` (ohne Auth-Library —
+  `jose` nur für die ID-Token-Validierung via JWKS). DB-gestützte Sessions
+  (`sessions`-Tabelle: SHA-256-Hash des Tokens, nie der Klartext) mit
+  persistentem HttpOnly-Cookie und **Rolling-TTL** (`SESSION_TTL_DAYS`,
+  Default 30 — verlängert sich, wenn weniger als die halbe TTL übrig ist).
+  Guard in `hooks.server.ts`: alles außer `/auth/*`, `/offline` und den
+  PWA-Assets (dieselbe Liste wie der Traefik-Router `recipes-pwa`) erfordert
+  eine Session. Logout ist **komplett** (App-Session + Keycloak-SSO via
+  `end_session_endpoint` + `id_token_hint`). Client-seitig fängt
+  `handleUnauthorized()` (`src/lib/api.ts`) 401er ab und leitet zum Login.
+  Ohne `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` ist die App
+  **fail-closed** komplett gesperrt (Login zeigt eine Info-Seite).
 - **Schema-Änderungen NUR über Flyway** (`db/migration/V*__*.sql`). Nie manuell mit
   `ALTER TABLE` in `db.ts` — Flyway checksummt die Files und ein manueller Eingriff
   macht die History inkonsistent.
@@ -115,8 +129,12 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Rezept-FAMILIE — für jeden gewählten Tag genügt irgendeine Version
   (Hauptrezept ODER Variante). Verwaltung: Einstellungen → Tags; die KI setzt
   beim Finalize Tags (`tagsHint` im Prompt bevorzugt vorhandene Begriffe).
-- **Auth-Tabellen entfernt** (V4): `users`/`sessions` wurden mit `V4__drop_auth.sql`
-  gedroppt — die App hat kein eigenes Login mehr (Schutz via Reverse Proxy).
+- **Auth-Tabellen** (V4 entfernt, V9 neu): Die alten `users`/`sessions` (Passwort-
+  Login) wurden in V4 gedroppt. V9 führt sie in neuer Form für das OIDC-Login
+  wieder ein: `users` (eine Zeile pro Keycloak-Benutzer, UNIQUE `(issuer, sub)`,
+  Profildaten aus dem ID-Token — keine Passwörter) und `sessions` (Token-Hash als
+  PK, `id_token` für den Logout-Hint, `expires_at` mit Rolling-Refresh;
+  FK → users mit CASCADE).
 - **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
   für App-Konfiguration. Aktuell: `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL`
   (z. B. `glm-5.2`) und `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`).
@@ -197,14 +215,18 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - **Env-Variablen** (`.env`, nicht committen):
   `DB_HOST` (default `localhost`), `DB_PORT` (default `3306`),
   `DB_NAME` (default `cooking`), `DB_USER` (default `cooking`), `DB_PASSWORD`,
-  `IMAGES_DIR` (default `./data/images`). `$env/dynamic/private` liest sie zur Runtime.
+  `IMAGES_DIR` (default `./data/images`), `ORIGIN` (z. B. `https://recipes.lkit.ch`
+  — Basis der OIDC-Redirect-URI), `OIDC_ISSUER` (z. B.
+  `https://auth.lkit.ch/realms/master`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
+  `SESSION_TTL_DAYS` (default `30`). `$env/dynamic/private` liest sie zur Runtime.
 - **`Date.now()` / `Math.random()`** sind nur in Workflow-Skripten gesperrt — im
   normalen App-Code (server- wie client-seitig) frei nutzbar.
 
 ## API-Endpunkte
 
-> Hinweis: Es gibt kein App-Level-Login mehr. Alle Endpunkte sind ungeschützt auf
-> App-Ebene — der Schutz liegt beim Reverse Proxy (s.o.).
+> Hinweis: Alle API-Endpunkte erfordern eine gültige Session (Guard in
+> `hooks.server.ts`). Ohne Login: `401` mit `{ error: 'Nicht angemeldet' }`
+> (JSON, kein Redirect — fetch-Klienten fangen das client-seitig ab).
 
 ### Kategorien
 - `GET /api/categories` - Alle Kategorien
@@ -244,11 +266,13 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 ## Infrastruktur
 
 Die App läuft hinter **Traefik** (TLS/Reverse Proxy) → **Nginx Alpine** (Forward Proxy)
-→ **Koch-App** (Node, Port 3000). Authentifizierung über **Keycloak** via
-`traefik-forward-auth` auf Traefik-Ebene. **PWA-Assets** (`/manifest.webmanifest`,
-`/sw.js`, `/workbox-*.js`, Icons) sind über einen separaten Traefik-Router
-**ohne Auth** erreichbar — sonst kann Chrome die PWA nicht installieren.
-Volle Doku: [`INFRA.md`](./INFRA.md).
+→ **Koch-App** (Node, Port 3000). **Authentifizierung erfolgt auf App-Ebene via
+OIDC gegen Keycloak** (`/auth/login` → Keycloak → `/auth/callback`); die frühere
+`traefik-forward-auth`-Middleware ist für die Koch-App entfernt (Stand: Umstellung
+auf App-Login). **PWA-Assets** (`/manifest.webmanifest`, `/sw.js`, `/workbox-*.js`,
+Icons) bleiben über den separaten Traefik-Router `recipes-pwa` ohne Auth erreichbar
+— die App-Whitelist in `hooks.server.ts` spiegelt dieselbe Liste. Einrichtung
+(Keycloak-Client, Realm-SSO-Settings, Traefik-Labels): [`INFRA.md`](./INFRA.md).
 
 ## Deployment (Proxmox)
 

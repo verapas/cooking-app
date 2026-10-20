@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { PageData } from './$types';
+  import { handleUnauthorized } from '$lib/api';
   import PortionControls from '$lib/components/PortionControls.svelte';
   import IngredientList from '$lib/components/IngredientList.svelte';
   import Stepper from '$lib/components/Stepper.svelte';
@@ -66,6 +67,7 @@
         body: fd,
         credentials: 'include'
       });
+      if (handleUnauthorized(res)) return;
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         uploadError = 'Upload fehlgeschlagen' + (data.error ? ': ' + data.error : '');
@@ -152,6 +154,7 @@
         credentials: 'include'
       });
 
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         await Swal.fire({
           title: 'Gelöscht!',

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { PageData } from './$types';
+  import { handleUnauthorized } from '$lib/api';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
 
@@ -36,6 +37,7 @@
       const res = await fetch(
         `/api/recipes?category_id=${data.category.id}&q=${encodeURIComponent(q)}`
       );
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         recipes = await res.json();
         activeQuery = q;

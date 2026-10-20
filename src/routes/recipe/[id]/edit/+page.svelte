@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { untrack } from 'svelte';
   import type { PageData } from './$types';
+  import { handleUnauthorized } from '$lib/api';
   import ImageUpload from '$lib/components/ImageUpload.svelte';
   import Icon from '$lib/components/Icon.svelte';
 
@@ -183,6 +184,7 @@
         body: JSON.stringify(body)
       });
 
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         goto(`/recipe/${data.recipe.id}`);
       } else {

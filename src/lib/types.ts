@@ -1,5 +1,14 @@
 // === Geteilte Typen für Rezept-Daten ===
 
+/** Angemeldeter Benutzer (OIDC/Keycloak) — Quelle: sessions/users-Tabellen,
+ *  siehe src/lib/server/auth.ts. Anzeige: name || username || email. */
+export interface SessionUser {
+  id: number;
+  username: string | null;
+  email: string | null;
+  name: string | null;
+}
+
 export interface Category {
   id: number;
   name: string;

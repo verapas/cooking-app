@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RecipeListItem } from '$lib/types';
   import { untrack } from 'svelte';
+  import { handleUnauthorized } from '$lib/api';
   import Icon from './Icon.svelte';
 
   let {
@@ -35,6 +36,7 @@
         credentials: 'include'
       });
 
+      if (handleUnauthorized(res)) return;
       if (!res.ok) {
         isFavorite = !newFavorite;
       }
@@ -60,6 +62,7 @@
         credentials: 'include'
       });
 
+      if (handleUnauthorized(res)) return;
       if (!res.ok) {
         isPinned = !newPinned;
         onPinChange?.(recipe.id, !newPinned);

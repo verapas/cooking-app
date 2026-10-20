@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { handleUnauthorized } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import type { PageData } from './$types';
 
@@ -26,6 +27,7 @@
         credentials: 'include',
         body: JSON.stringify({ name })
       });
+      if (handleUnauthorized(res)) return;
       const result = await res.json();
       if (res.ok) {
         // Duplikat (case-insensitiv) nicht doppelt in die Liste legen.
@@ -54,6 +56,7 @@
         method: 'DELETE',
         credentials: 'include'
       });
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         tools = tools.filter((t) => t.id !== id);
       } else {
