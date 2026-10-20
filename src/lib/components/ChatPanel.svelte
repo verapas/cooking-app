@@ -14,6 +14,7 @@
 
   import { untrack } from 'svelte';
   import { tick } from 'svelte';
+  import { handleUnauthorized } from '$lib/api';
   import Icon from './Icon.svelte';
   import type { RecipeInput } from '$lib/types';
 
@@ -138,6 +139,7 @@
     });
 
     const ct = res.headers.get('content-type') ?? '';
+    if (handleUnauthorized(res)) return;
     if (!res.ok || !ct.includes('text/event-stream')) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Fehler (${res.status}).`);
@@ -195,6 +197,7 @@
         credentials: 'include',
         body: JSON.stringify({ messages, mode, recipeId })
       });
+      if (handleUnauthorized(res)) return;
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || `Fehler (${res.status}).`);
@@ -235,6 +238,7 @@
         credentials: 'include',
         body: JSON.stringify(preview)
       });
+      if (handleUnauthorized(res)) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = data.id as number;
@@ -257,6 +261,7 @@
         credentials: 'include',
         body: JSON.stringify(preview)
       });
+      if (handleUnauthorized(res)) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = recipeId;
@@ -295,6 +300,7 @@
         credentials: 'include',
         body: JSON.stringify(body)
       });
+      if (handleUnauthorized(res)) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = data.id as number;

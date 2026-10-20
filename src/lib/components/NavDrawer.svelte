@@ -4,9 +4,12 @@
   import { closeDrawer, nav } from '$lib/nav.svelte';
   import Icon from './Icon.svelte';
   import CategoryIcon from './CategoryIcon.svelte';
-  import type { Category } from '$lib/types';
+  import type { Category, SessionUser } from '$lib/types';
 
-  let { categories }: { categories: Category[] } = $props();
+  let { categories, user = null }: { categories: Category[]; user?: SessionUser | null } = $props();
+
+  // Anzeigename: name || username || email (siehe SessionUser in types.ts).
+  const displayName = $derived(user?.name || user?.username || user?.email || null);
 
   // Nach jeder Navigation den Drawer schließen.
   afterNavigate(() => {
@@ -64,6 +67,28 @@
       <a class="item" href="/settings" class:active={page.url.pathname.startsWith('/settings')}>
         <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
       </a>
+
+      {#if user}
+        <div class="divider"></div>
+        <div class="userbox" title={user.email ?? undefined}>
+          <span class="ic"><Icon name="users" size={20} /></span>
+          <span class="who">
+            <span class="who-name">{displayName}</span>
+            {#if user.email && user.email !== displayName}
+              <span class="who-mail">{user.email}</span>
+            {/if}
+          </span>
+        </div>
+        <!-- Kompletter Logout (App-Session + Keycloak-SSO): POST-Formular,
+             der Server antwortet mit Redirect zur end_session-URL. Der
+             Button schließt den Drawer manuell — ein Formular-Submit
+             navigiert vollständg, löst aber kein afterNavigate aus. -->
+        <form method="POST" action="/auth/logout">
+          <button class="item logout" onclick={closeDrawer}>
+            <span class="ic"><Icon name="logout" size={20} /></span> Abmelden
+          </button>
+        </form>
+      {/if}
     </nav>
   </aside>
 {/if}
@@ -200,5 +225,50 @@
     height: 1px;
     background: var(--border);
     margin: 10px 8px;
+  }
+  .userbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .userbox .ic {
+    width: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .who-name {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .who-mail {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .logout {
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    color: var(--text-dim);
+  }
+  .logout:hover {
+    color: var(--danger);
   }
 </style>

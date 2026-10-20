@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { handleUnauthorized } from '$lib/api';
   import Icon from './Icon.svelte';
 
   let {
@@ -27,6 +28,7 @@
         body: fd,
         credentials: 'include'
       });
+      if (handleUnauthorized(res)) return;
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         error = 'Upload fehlgeschlagen' + (data.error ? ': ' + data.error : '');

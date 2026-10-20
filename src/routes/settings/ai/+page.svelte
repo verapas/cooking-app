@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { handleUnauthorized } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
 
   let { data } = $props();
@@ -83,6 +84,7 @@
         credentials: 'include',
         body: JSON.stringify(body)
       });
+      if (handleUnauthorized(res)) return;
       const result = await res.json();
       if (res.ok) {
         hasKey = result.has_key;

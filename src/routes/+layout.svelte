@@ -50,7 +50,7 @@
 <div class="app-scroll" bind:this={scrollEl}>
   {@render children()}
 </div>
-<NavDrawer categories={data.categories} />
+<NavDrawer categories={data.categories} user={data.user} />
 <PWAInstall />
 
 <style>

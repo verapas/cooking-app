@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { PageData } from './$types';
+  import { handleUnauthorized } from '$lib/api';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { applyPinReorder } from '$lib/recipeOrder';
@@ -50,6 +51,7 @@
       const res = await fetch(
         params.toString() ? `/api/recipes?${params}` : `/api/recipes?limit=${PAGE_SIZE}`
       );
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         recipes = await res.json();
         hasMore =
@@ -111,6 +113,7 @@
     loadingMore = true;
     try {
       const res = await fetch(`/api/recipes?limit=${PAGE_SIZE}&offset=${recipes.length}`);
+      if (handleUnauthorized(res)) return;
       if (res.ok) {
         const more = await res.json();
         recipes = [...recipes, ...more];

@@ -92,6 +92,15 @@ services:
       DB_NAME: cooking
       DB_USER: cooking
       DB_PASSWORD: devdbpw
+      # OIDC-Login (Keycloak) — für lokale Login-Tests Werte einkommentieren
+      # und in Keycloak die Redirect-URI http://localhost:3000/auth/callback
+      # am Client registrieren (für `pnpm dev` entsprechend :5173).
+      # Ohne Konfiguration bleibt die App lokal komplett gesperrt (die
+      # Login-Seite zeigt dann eine Info-Seite statt eines Fehlers).
+      # OIDC_ISSUER: https://auth.lkit.ch/realms/master
+      # OIDC_CLIENT_ID: koch-app
+      # OIDC_CLIENT_SECRET: xxx
+      SESSION_TTL_DAYS: "30"
 
 volumes:
   koch-db-dev:
