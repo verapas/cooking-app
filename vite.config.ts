@@ -15,7 +15,8 @@ export default defineConfig({
         description: 'Mobile-first Kochrezept-App',
         theme_color: '#15110d',
         background_color: '#15110d',
-        display: 'standalone',
+
+        display: 'fullscreen',
         orientation: 'portrait',
         icons: [
           {
