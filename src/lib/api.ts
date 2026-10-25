@@ -16,3 +16,27 @@ export function handleUnauthorized(res: Response): boolean {
   location.assign(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   return true;
 }
+
+/**
+ * Liest eine API-Antwort als JSON-Objekt. Die App antwortet auf /api/*
+ * immer mit JSON — kommt stattdessen HTML zurück (z. B. die 504-Timeout-
+ * Seite des Nginx-Proxies, wenn ein langer KI-Aufruf das Zeitlimit
+ * überschreitet), wirft dieser Helper eine verständliche Meldung
+ * statt „Unexpected token '<' … is not valid JSON".
+ */
+export async function readJson(
+  res: Response
+): Promise<{ error?: string; [key: string]: unknown }> {
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw) as { error?: string; [key: string]: unknown };
+  } catch {
+    if (res.status === 502 || res.status === 504) {
+      throw new Error(
+        `Der Server hat wegen Zeitüberschreitung abgebrochen (HTTP ${res.status}). ` +
+          'Vermutlich hat die KI zu lange gebraucht — bitte erneut versuchen.'
+      );
+    }
+    throw new Error(`Unerwartete Antwort vom Server (HTTP ${res.status}).`);
+  }
+}
