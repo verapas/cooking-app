@@ -1,5 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { beforeNavigate } from '$app/navigation';
   import type { PageData } from './$types';
   import { handleUnauthorized } from '$lib/api';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
@@ -70,7 +72,9 @@
     } else {
       url.searchParams.delete('tag_ids');
     }
-    history.replaceState({}, '', url);
+    // history.state bewahren — dort liegen die Restore-Daten für die
+    // nachgeladenen Rezepte (siehe unten); {} würde sie löschen.
+    history.replaceState(history.state, '', url);
   }
 
   async function runSearch(): Promise<void> {
@@ -112,18 +116,99 @@
     if (loadingMore || !hasMore) return;
     loadingMore = true;
     try {
-      const res = await fetch(`/api/recipes?limit=${PAGE_SIZE}&offset=${recipes.length}`);
-      if (handleUnauthorized(res)) return;
-      if (res.ok) {
-        const more = await res.json();
-        recipes = [...recipes, ...more];
-        // kamen wieder genau PAGE_SIZE, könnte es noch mehr geben
-        hasMore = Array.isArray(more) && more.length === PAGE_SIZE;
-      }
-    } catch {
-      // Netzwerkfehler: Button bleibt, User kann es erneut versuchen.
+      await fetchChunk(PAGE_SIZE);
     } finally {
       loadingMore = false;
+    }
+  }
+
+  // === Restore nachgeladener Rezepte bei Rückkehr ===
+  //
+  // Die per „Mehr laden" nachgeladenen Rezepte leben nur im Client-State —
+  // bei Navigation weg und zurück startet die Liste wieder bei den 30 aus
+  // dem Server-Load, obwohl das Layout an die alte Scroll-Position springt.
+  // Deshalb: Beim Wegnavigieren werden Anzahl + Scroll-Position in der
+  // History-Entry (history.state) gemerkt; beim Rückkehr-Mount wird die
+  // Differenz automatisch nachgeladen und an die alte Position gescrollt.
+  // (Suche/Tag-Filter sind ausgenommen — dort gibt es „Mehr laden" nicht.)
+
+  interface ListHistoryState {
+    recipesLoaded?: number;
+    scrollTop?: number;
+    [key: string]: unknown; // u. a. SvelteKits eigenen $sveltekit-State
+  }
+
+  /** Scroll-Container gehört dem Layout (.app-scroll). */
+  function appScroll(): HTMLElement | null {
+    return document.querySelector('.app-scroll');
+  }
+
+  /** Zustand in die aktuelle History-Entry schreiben. */
+  function persistListState(): void {
+    const el = appScroll();
+    history.replaceState(
+      {
+        ...(history.state as ListHistoryState | null),
+        recipesLoaded: recipes.length,
+        scrollTop: el?.scrollTop
+      },
+      ''
+    );
+  }
+
+  beforeNavigate((nav) => {
+    if (nav.from?.url.pathname !== '/') return;
+    if (activeQuery || selectedTagIds.length > 0) return;
+    persistListState();
+  });
+
+  onMount(async () => {
+    const st = history.state as ListHistoryState | null;
+    const target = st?.recipesLoaded ?? 0;
+    if (target <= recipes.length || data.initialTagIds.length > 0) return;
+    // Differenz in Schritten nachladen (API-Limit pro Call: 100).
+    while (recipes.length < target && hasMore) {
+      const ok = await fetchChunk(Math.min(PAGE_SIZE, target - recipes.length));
+      if (!ok) break; // Server-/Netzwerkfehler: Button bleibt, User lädt selbst
+    }
+    if (typeof st?.scrollTop === 'number') {
+      await tick();
+      requestAnimationFrame(() => {
+        const el = appScroll();
+        if (el) el.scrollTop = st.scrollTop!;
+      });
+    }
+  });
+
+  /**
+   * Lädt `limit` weitere Rezepte ab der aktuellen Listenlänge nach und
+   * hängt sie an. Rückgabe false = nichts mehr zu holen / Fehler (Aufrufer
+   * sollte aufhören bzw. den Button anbieten). Duplikat-IDs (Sortierung
+   * hat sich zwischenzeitlich verschoben) werden übersprungen.
+   */
+  async function fetchChunk(limit: number): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/recipes?limit=${limit}&offset=${recipes.length}`);
+      if (handleUnauthorized(res)) return true; // Redirect läuft, Schleife beenden
+      if (!res.ok) return false;
+      const more = await res.json();
+      if (!Array.isArray(more) || more.length === 0) {
+        hasMore = false;
+        return false;
+      }
+      const seen = new Set(recipes.map((r) => r.id));
+      const fresh = more.filter((r) => !seen.has(r.id));
+      recipes = [...recipes, ...fresh];
+      hasMore = more.length === limit;
+      // Fortschritt auch ohne Navigation sichern (überlebt F5-Reload;
+      // scrollTop wird separat erst beim Wegnavigieren gemerkt).
+      history.replaceState(
+        { ...(history.state as ListHistoryState | null), recipesLoaded: recipes.length },
+        ''
+      );
+      return fresh.length > 0;
+    } catch {
+      return false; // Netzwerkfehler: Button bleibt, User kann es erneut versuchen.
     }
   }
 

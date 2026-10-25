@@ -14,7 +14,7 @@
 
   import { untrack } from 'svelte';
   import { tick } from 'svelte';
-  import { handleUnauthorized } from '$lib/api';
+  import { handleUnauthorized, readJson } from '$lib/api';
   import Icon from './Icon.svelte';
   import type { RecipeInput } from '$lib/types';
 
@@ -118,7 +118,7 @@
         );
       });
     } catch (err) {
-      errorMsg = err instanceof Error ? err.message : 'Verbindungsfehler.';
+      errorMsg = err instanceof TypeError ? 'Keine Verbindung zum Server.' : err instanceof Error ? err.message : 'Verbindungsfehler.';
       // Platzhalter wieder entfernen, wenn nichts kam.
       messages = messages.filter((m, i) => !(i === messages.length - 1 && m.content === ''));
     } finally {
@@ -141,7 +141,7 @@
     const ct = res.headers.get('content-type') ?? '';
     if (handleUnauthorized(res)) return;
     if (!res.ok || !ct.includes('text/event-stream')) {
-      const data = await res.json().catch(() => ({}));
+      const data = await readJson(res);
       throw new Error(data.error || `Fehler (${res.status}).`);
     }
 
@@ -198,7 +198,7 @@
         body: JSON.stringify({ messages, mode, recipeId })
       });
       if (handleUnauthorized(res)) return;
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) {
         throw new Error(data.error || `Fehler (${res.status}).`);
       }
@@ -214,7 +214,7 @@
           'Variante';
       }
     } catch (err) {
-      errorMsg = err instanceof Error ? err.message : 'Finalisieren fehlgeschlagen.';
+      errorMsg = err instanceof TypeError ? 'Keine Verbindung zum Server.' : err instanceof Error ? err.message : 'Finalisieren fehlgeschlagen.';
     } finally {
       finalizing = false;
     }
@@ -239,12 +239,12 @@
         body: JSON.stringify(preview)
       });
       if (handleUnauthorized(res)) return;
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = data.id as number;
-      onsaved?.(data.id);
+      onsaved?.(data.id as number);
     } catch (err) {
-      saveError = err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
+      saveError = err instanceof TypeError ? 'Keine Verbindung zum Server.' : err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
     } finally {
       saving = false;
     }
@@ -262,12 +262,12 @@
         body: JSON.stringify(preview)
       });
       if (handleUnauthorized(res)) return;
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = recipeId;
       onsaved?.(recipeId);
     } catch (err) {
-      saveError = err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
+      saveError = err instanceof TypeError ? 'Keine Verbindung zum Server.' : err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
     } finally {
       saving = false;
     }
@@ -301,12 +301,12 @@
         body: JSON.stringify(body)
       });
       if (handleUnauthorized(res)) return;
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || `Fehler (${res.status}).`);
       savedId = data.id as number;
-      onsaved?.(data.id);
+      onsaved?.(data.id as number);
     } catch (err) {
-      saveError = err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
+      saveError = err instanceof TypeError ? 'Keine Verbindung zum Server.' : err instanceof Error ? err.message : 'Speichern fehlgeschlagen.';
     } finally {
       saving = false;
     }
