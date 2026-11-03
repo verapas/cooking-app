@@ -1,10 +1,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { updateCategory, deleteCategory } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import type { CategoryUpdateInput } from '$lib/types';
 
-// PUT /api/categories/[id]  (Schutz über Reverse Proxy, nicht auf App-Ebene)
-export const PUT: RequestHandler = async ({ params, request }) => {
+// PUT /api/categories/[id]  (session-geschützt, nur eigener Space)
+export const PUT: RequestHandler = async ({ locals, params, request }) => {
   const id = Number(params.id);
   if (isNaN(id)) {
     throw error(400, 'Ungültige Kategorie-ID');
@@ -17,7 +18,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
     throw error(400, 'Ungültiges JSON');
   }
 
-  const success = await updateCategory(id, body);
+  const success = await updateCategory(requireSpaceId(locals), id, body);
   if (!success) {
     throw error(404, 'Kategorie nicht gefunden');
   }
@@ -25,14 +26,14 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   return json({ ok: true });
 };
 
-// DELETE /api/categories/[id]  (Schutz über Reverse Proxy, nicht auf App-Ebene)
-export const DELETE: RequestHandler = async ({ params }) => {
+// DELETE /api/categories/[id]  (session-geschützt, nur eigener Space)
+export const DELETE: RequestHandler = async ({ locals, params }) => {
   const id = Number(params.id);
   if (isNaN(id)) {
     throw error(400, 'Ungültige Kategorie-ID');
   }
 
-  const success = await deleteCategory(id);
+  const success = await deleteCategory(requireSpaceId(locals), id);
   if (!success) {
     throw error(404, 'Kategorie nicht gefunden');
   }

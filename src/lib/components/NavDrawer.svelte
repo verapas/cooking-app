@@ -43,6 +43,10 @@
         <span class="ic"><Icon name="star" size={20} /></span> Favoriten
       </a>
 
+      <a class="item" href="/public" class:active={page.url.pathname.startsWith('/public')}>
+        <span class="ic"><Icon name="globe" size={20} /></span> Öffentlich
+      </a>
+
       <a
         class="item"
         href="/chat"
@@ -68,6 +72,12 @@
       <a class="item" href="/settings" class:active={page.url.pathname.startsWith('/settings')}>
         <span class="ic"><Icon name="settings" size={20} /></span> Einstellungen
       </a>
+
+      {#if user?.is_admin}
+        <a class="item" href="/admin" class:active={page.url.pathname.startsWith('/admin')}>
+          <span class="ic"><Icon name="lock" size={20} /></span> Verwaltung
+        </a>
+      {/if}
 
       {#if user}
         <div class="divider"></div>

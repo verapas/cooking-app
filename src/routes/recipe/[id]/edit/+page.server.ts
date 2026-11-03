@@ -1,17 +1,18 @@
 import { error } from '@sveltejs/kit';
-import { getRecipe, getMainRecipeId, listRecipeVersions, listTags } from '$lib/server/queries';
-import { listCategories } from '$lib/server/queries';
+import { getRecipe, getMainRecipeId, listRecipeVersions, listTags, listCategories } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params }) => {
-  const recipe = await getRecipe(Number(params.id));
+export const load: PageServerLoad = async ({ locals, params }) => {
+  const spaceId = requireSpaceId(locals);
+  const recipe = await getRecipe(spaceId, Number(params.id));
   if (!recipe) throw error(404, 'Rezept nicht gefunden');
 
-  const mainRecipeId = await getMainRecipeId(recipe.id);
+  const mainRecipeId = await getMainRecipeId(spaceId, recipe.id);
   if (!mainRecipeId) throw error(500, 'Ungültiger Rezeptstatus');
-  const versions = await listRecipeVersions(mainRecipeId);
-  const categories = await listCategories();
-  const tags = await listTags();
+  const versions = await listRecipeVersions(spaceId, mainRecipeId);
+  const categories = await listCategories(spaceId);
+  const tags = await listTags(spaceId);
 
   return { recipe, versions, categories, tags };
 };

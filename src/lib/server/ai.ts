@@ -45,13 +45,14 @@ export class RecipeParseError extends Error {
   }
 }
 
-// --- Client-Erzeugung (pro Aufruf, da Key/Modell/Base-URL zur Laufzeit wechseln) ---
+// --- Client-Erzeugung (pro Aufruf, da Key/Modell/Base-URL pro Space zur
+//     Laufzeit wechseln) ---
 
-async function createClient(): Promise<{ client: OpenAI; model: string }> {
-  const apiKey = await getApiKey();
+async function createClient(spaceId: number): Promise<{ client: OpenAI; model: string }> {
+  const apiKey = await getApiKey(spaceId);
   if (!apiKey || apiKey.trim() === '') throw new NoApiKeyError();
-  const model = await getModel();
-  const baseURL = await getBaseUrl();
+  const model = await getModel(spaceId);
+  const baseURL = await getBaseUrl(spaceId);
   const client = new OpenAI({ apiKey, baseURL });
   return { client, model };
 }
@@ -258,10 +259,11 @@ ${steps || '  (keine)'}`;
  * Route) übergibt nur die user/assistant-Nachrichten aus dem Client-Verlauf.
  */
 export async function* streamChat(
+  spaceId: number,
   messages: ChatMessage[],
   systemPrompt: string
 ): AsyncGenerator<string, void, unknown> {
-  const { client, model } = await createClient();
+  const { client, model } = await createClient(spaceId);
   const stream = await client.chat.completions.create({
     model,
     stream: true,
@@ -293,20 +295,22 @@ export async function* streamChat(
  * (inkl. Bestätigungsfragen), die für die JSON-Erzeugung irrelevant sind.
  * Deshalb der harte System-Anker, der jeden Gesprächsmodus übersteuert.
  *
- * @param messages   bisheriger Chat-Verlauf (user/assistant)
+ * @param spaceId   aktiver Space (für die KI-Settings: Key/Modell/Base-URL)
+ * @param messages  bisheriger Chat-Verlauf (user/assistant)
  * @param categories verfügbare Kategorien (für category_slug)
  * @param tools      Küchenutensilien der Person (Prompt-Kontext)
  * @param tagNames   vorhandene Tag-Namen (Prompt-Kontext für "tags")
  * @param context    optionales Kontext-Rezept (Modus 'improve')
  */
 export async function finalizeRecipe(
+  spaceId: number,
   messages: ChatMessage[],
   categories: Category[],
   tools: KitchenTool[],
   tagNames: string[],
   contextRecipe?: RecipeWithDetails
 ): Promise<RecipeInput> {
-  const { client, model } = await createClient();
+  const { client, model } = await createClient(spaceId);
   const systemPrompt = finalizeSystemPrompt(categories, tools, tagNames, contextRecipe);
   const completion = await client.chat.completions.create({
     model,

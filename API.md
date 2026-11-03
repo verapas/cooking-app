@@ -2,9 +2,19 @@
 
 Base URL: `http://localhost:5173/api`
 
-## Authentifizierung
+## Authentifikation
 
-Es gibt **keine App-Level-Authentifizierung** mehr (Auth-Tabellen wurden mit `V4__drop_auth.sql` entfernt). Alle Endpunkte sind auf App-Ebene offen — der Zugriffsschutz liegt vollständig auf Infrastrukturebene (Reverse Proxy / VPN, siehe `INFRA.md`). Der Container sollte nie direkt aus dem Internet erreichbar sein.
+Login via **OIDC/Keycloak** auf App-Ebene (Authorization Code Flow + PKCE,
+Details siehe `CLAUDE.md`/`INFRA.md`): Nach dem Login gilt eine DB-gestützte
+Session (HttpOnly-Cookie `koch_session`, Rolling-TTL). Ohne Session antworten
+API-Routen mit `401 {"error":"Nicht angemeldet"}`.
+
+**Spaces (V10):** Jeder Benutzer hat einen aktiven Space (Datenbereich).
+Alle Endpunkte hier sind **space-scoped** — sie liefern und ändern nur Daten
+des aktiven Spaces. IDs aus fremden Spaces (z. B. Rezepte anderer Benutzer)
+liefern `404`, Bilder unter `/images/*` sind nur für Space-Mitglieder bzw.
+für veröffentlichte Rezepte abrufbar. Neuer Benutzer → beim ersten Login
+automatisch ein persönlicher Space mit Standard-Kategorien.
 
 ## Kategorien
 
@@ -58,10 +68,14 @@ Content-Type: application/json
 
 {
   "name": "Suppen Deluxe",
-  "icon": "🥣",
+  "icon": "soup",
   "sort_order": 1
 }
 ```
+
+**Hinweis zu `icon`:** entweder ein Key aus der SVG-Icon-Registry
+(`src/lib/icons.ts`, z. B. `"soup"`, `"pasta"`, `"cake"`) — gerendert als
+eigenes Linien-Icon — oder ein beliebiger String/Emoji als Text-Fallback.
 
 Response:
 ```json
@@ -391,6 +405,41 @@ Response:
   "ok": true
 }
 ```
+
+## Favoriten & Pins
+
+### Veröffentlichen („Öffentlich"-Bereich)
+
+```http
+POST /api/recipes/2/publish
+```
+
+Response:
+```json
+{ "ok": true, "is_published": true }
+```
+
+Schaltet den Veröffentlichungs-Status um (nur im eigenen Space). Veröffentlichte
+Rezepte erscheinen unter `/public` für **alle** eingeloggten Benutzer — inkl.
+Bild und nachträglicher Änderungen. Zurückziehen (`is_published: false`) nimmt
+das Rezept wieder aus dem öffentlichen Bereich; bereits erstellte Kopien
+bleiben erhalten.
+
+### Veröffentlichtes Rezept in den eigenen Space kopieren
+
+```http
+POST /api/recipes/2/copy
+```
+
+Response:
+```json
+{ "id": 42 }
+```
+
+Legt eine neue, unveröffentlichte Kopie (Schritte, Zutaten, Tags per
+Get-or-Create, Kategorie nach Slug, Bild als Datei-Duplikat) im aktiven Space
+an. Berechtigt ist, wer das Rezept im eigenen Space hat ODER es veröffentlicht
+ist. Eigene Rezepte kopieren → `422`.
 
 ## Favoriten & Pins
 

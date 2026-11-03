@@ -20,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { env } from '$env/dynamic/private';
 import { pool, type ResultSetHeader, type RowDataPacket } from './db';
-import type { SessionUser } from '$lib/types';
+import type { SessionUser, ActiveSpace, SpaceRole } from '$lib/types';
 
 // --- Konfiguration ---
 const ISSUER = env.OIDC_ISSUER?.replace(/\/+$/, '') ?? null;
@@ -202,12 +202,21 @@ export interface SessionRecord {
   idToken: string | null;
   /** true, wenn die Restlaufzeit unter der Hälfte der TTL liegt (rolling). */
   needsRefresh: boolean;
+  /** Aktiver Space, sofern die Membership dazu noch besteht (LEFT JOIN).
+   *  null → hooks.server.ts löst via resolveActiveSpace auf (Erstlogin,
+   *  Space gelöscht oder herausgeworfen). */
+  space: ActiveSpace | null;
 }
 
 export async function getSession(token: string): Promise<SessionRecord | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT s.id_token, s.expires_at, u.id AS uid, u.username, u.email, u.name
-     FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT s.id_token, s.expires_at,
+            u.id AS uid, u.username, u.email, u.name, u.is_admin,
+            sp.id AS space_id, sp.name AS space_name, sm.role AS space_role
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     LEFT JOIN spaces sp ON sp.id = u.active_space_id
+     LEFT JOIN space_members sm ON sm.space_id = sp.id AND sm.user_id = u.id
      WHERE s.id = ? AND s.expires_at > NOW()`,
     [hashToken(token)]
   );
@@ -220,10 +229,19 @@ export async function getSession(token: string): Promise<SessionRecord | null> {
       id: Number(row.uid),
       username: (row.username as string | null) ?? null,
       email: (row.email as string | null) ?? null,
-      name: (row.name as string | null) ?? null
+      name: (row.name as string | null) ?? null,
+      is_admin: Boolean(row.is_admin)
     },
     idToken: (row.id_token as string | null) ?? null,
-    needsRefresh: expiresAt - Date.now() < (SESSION_TTL_SEC * 1000) / 2
+    needsRefresh: expiresAt - Date.now() < (SESSION_TTL_SEC * 1000) / 2,
+    space:
+      row.space_id != null && row.space_role != null
+        ? {
+            id: Number(row.space_id),
+            name: row.space_name as string,
+            role: row.space_role as SpaceRole
+          }
+        : null
   };
 }
 

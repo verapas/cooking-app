@@ -8,6 +8,17 @@ auf Deutsch. PWA-fähig mit Offline-Unterstützung.
 ## Features
 
 - 📱 Mobile-first, Dark-Theme (Koch-Modus – blendet beim Kochen nicht)
+- 👥 **Multi-User mit Spaces**: Login via Keycloak (OIDC); jeder Benutzer
+  hat einen eigenen, isolierten Datenbereich (Rezepte, Kategorien, Tags,
+  KI-Settings) — mehrere Konten können sich einen Space teilen (z. B.
+  Partner), Freunde bekommen automatisch einen privaten Space
+- 🛠️ **Admin-Verwaltung** (`/admin`, nur App-Admins): Spaces anlegen/
+  umbenennen/löschen, Benutzer in Spaces verschieben, Rollen (owner/
+  member) vergeben — und Benutzer direkt in der App anlegen (optional,
+  über die Keycloak-Admin-API mit Service-Account, s. `infra.md`)
+- 🌍 **Öffentlicher Bereich**: Rezepte per Globe-Button veröffentlichen —
+  sie erscheinen unter „Öffentlich" (mit Urheber-Angabe) und können von
+  allen Nutzern als eigene Kopie in ihren Space übernommen werden
 - 🗂️ Kategorien-Navigation (Suppen, Pasta, Desserts, …)
 - 📖 Rezept-Detail in zwei Ansichten:
   - **Klassisch**: komplette Zutatenliste + nummerierte Schritte
@@ -151,9 +162,12 @@ Update: Pull → Migrator läuft einmal mit den neuen SQL-Files → App startet.
 ## API
 
 Die API ist über SvelteKit-Endpunkte (`src/routes/api/`) realisiert.
-**Wichtig:** Es gibt kein App-Level-Login — alle Endpunkte sind ungeschützt
-auf App-Ebene. Der Zugriffsschutz liegt vollständig beim Reverse Proxy /
-Netzwerk (die App sollte nie direkt aus dem Internet erreichbar sein).
+**Login:** App-Level via OIDC/Keycloak — ohne Session liefern API-Routen
+`401`, Seiten leiten zum Login weiter. **Space-Isolation:** Alle Daten-
+Endpunkte beziehen sich auf den aktiven Space des Benutzers; Rezepte,
+Kategorien, Tags und KI-Settings anderer Spaces sind unsichtbar (IDs
+fremder Spaces → `404`). Bilder (`/images/*`) sind nur für Space-Mitglieder
+(oder bei veröffentlichten Rezepten) abrufbar.
 
 ### Kategorien & Rezepte
 
@@ -246,7 +260,14 @@ Rezept am Ende.
 einem Schritt zugeordnet). Details zum Schema: `db/migration/V1__init_schema.sql`.
 Zusätzlich gibt es seit `V2__settings.sql` die Tabelle `settings` (`key`,
 `value`) für die KI-Konfiguration (API-Key, Modell, Base-URL — seit `V3`
-generisch für beliebige Anbieter).
+generisch für beliebige Anbieter) und seit `V9` die Auth-Tabellen
+(`users`, `sessions` für den OIDC-Login). Seit `V10__spaces.sql` ist alles
+Multi-User-fähig: `spaces` + `space_members` (Rolle owner/member), alle
+Inhalts-Tabellen tragen eine `space_id`, `users.active_space_id` bestimmt
+den aktiven Space, `users.is_admin` markiert App-Admins, und `recipes`
+hat `is_published`/`published_at`/`created_by` für den späteren
+„Öffentlich"-Bereich. Der V10-Backfill legt den Space „Familie" über alle
+bestehenden Daten.
 Schema-Änderungen immer als neue Flyway-Migration (`V2__…`, `V3__…`), nie
 manuell — Flyway checksummt die Dateien.
 

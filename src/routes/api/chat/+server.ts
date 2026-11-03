@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getRecipe, listCategories, listKitchenTools } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import { getApiKey } from '$lib/server/settings';
 import {
   streamChat,
@@ -32,7 +33,8 @@ interface ChatRequestBody {
   recipeId?: unknown;
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ locals, request }) => {
+  const spaceId = requireSpaceId(locals);
   let body: ChatRequestBody;
   try {
     body = await request.json();
@@ -70,7 +72,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // --- System-Prompt nach Modus wählen (inkl. Küchenutensilien) ---
   let systemPrompt: string;
-  const tools = await listKitchenTools();
+  const tools = await listKitchenTools(spaceId);
   if (mode === 'improve') {
     const recipeId =
       typeof body.recipeId === 'number'
@@ -81,16 +83,16 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!recipeId || !Number.isFinite(recipeId)) {
       throw error(422, 'Für Modus "improve" wird "recipeId" benötigt.');
     }
-    const recipe = await getRecipe(recipeId);
+    const recipe = await getRecipe(spaceId, recipeId);
     if (!recipe) throw error(404, 'Rezept nicht gefunden.');
     systemPrompt = systemPromptImprove(recipe, tools);
   } else {
-    const categories = await listCategories();
+    const categories = await listCategories(spaceId);
     systemPrompt = systemPromptNew(categories, tools);
   }
 
   // --- Key-Check VOR dem Stream: klare JSON-Fehlermeldung ---
-  const apiKey = await getApiKey();
+  const apiKey = await getApiKey(spaceId);
   if (!apiKey || apiKey.trim() === '') {
     return json({ error: 'Kein API-Key konfiguriert.', code: 'no_api_key' }, { status: 400 });
   }
@@ -102,7 +104,7 @@ export const POST: RequestHandler = async ({ request }) => {
       const send = (obj: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
-        for await (const delta of streamChat(messages, systemPrompt)) {
+        for await (const delta of streamChat(spaceId, messages, systemPrompt)) {
           send({ delta });
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));

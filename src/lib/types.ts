@@ -7,6 +7,48 @@ export interface SessionUser {
   username: string | null;
   email: string | null;
   name: string | null;
+  /** App-Admin (Phase 2: Benutzerverwaltung) — gesetzt via V10-Backfill/SQL. */
+  is_admin: boolean;
+}
+
+/** Rolle eines Benutzers in einem Space. */
+export type SpaceRole = 'owner' | 'member';
+
+/** Der aktive Space des Benutzers — Scope für alle Daten-Queries
+ *  (hooks.server.ts löst ihn auf und legt ihn in locals.space ab). */
+export interface ActiveSpace {
+  id: number;
+  name: string;
+  role: SpaceRole;
+}
+
+/** Benutzer mit Mitgliedschaften — Datenlage für /admin. */
+export interface AdminUser {
+  id: number;
+  username: string | null;
+  email: string | null;
+  name: string | null;
+  is_admin: boolean;
+  active_space_id: number | null;
+  last_login_at: string | null;
+  created_at: string;
+  memberships: { space_id: number; space_name: string; role: SpaceRole }[];
+}
+
+/** Space mit Mitgliedern und Rezept-Zähler — Datenlage für /admin. */
+export interface AdminSpace {
+  id: number;
+  name: string;
+  created_at: string;
+  recipe_count: number;
+  members: {
+    user_id: number;
+    username: string | null;
+    name: string | null;
+    role: SpaceRole;
+    /** true, wenn dieser Space gerade der aktive Space des Mitglieds ist. */
+    is_active_space: boolean;
+  }[];
 }
 
 export interface Category {
@@ -36,6 +78,8 @@ export interface TagWithCount extends Tag {
 
 export interface Recipe {
   id: number;
+  /** Space, zu dem das Rezept gehört (V10) — Zeile trägt die Spalte seitdem. */
+  space_id: number;
   title: string;
   description: string | null;
   category_id: number | null;
@@ -48,6 +92,11 @@ export interface Recipe {
   /** Pin („heute kochen"): steht in Listen zuoberst, orange hervorgehoben. */
   is_pinned: boolean;
   pinned_at: string | null;
+  /** Veröffentlicht (Phase 3 „Öffentlich"): im öffentlichen Bereich sichtbar. */
+  is_published: boolean;
+  published_at: string | null;
+  /** Urheber (users.id) — für Anzeige „von wem" im öffentlichen Bereich. */
+  created_by: number | null;
   /** Tag-Namen dieses Rezepts (Hauptrezept und Varianten können eigene haben). */
   tags: string[];
   parent_recipe_id: number | null;
@@ -87,6 +136,20 @@ export interface RecipeWithDetails extends Recipe {
 }
 
 // === Eingabe-Typen für die API (Open Claw) ===
+
+/** Veröffentlichtes Rezept im öffentlichen Bereich (Phase 3 „Öffentlich") —
+ *  Rezept aus einem beliebigen Space, mit Attribution. */
+export interface PublishedListItem extends RecipeListItem {
+  /** Anzeigename des Urhebers (name || username || email) oder null. */
+  author_name: string | null;
+  space_name: string;
+}
+
+/** Detail eines veröffentlichten Rezepts (öffentliche Detailseite). */
+export interface PublishedRecipe extends RecipeWithDetails {
+  author_name: string | null;
+  space_name: string;
+}
 
 export interface IngredientInput {
   name: string;

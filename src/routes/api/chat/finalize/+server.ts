@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getRecipe, listCategories, listKitchenTools, listTags } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import { getApiKey } from '$lib/server/settings';
 import {
   finalizeRecipe,
@@ -32,7 +33,8 @@ interface FinalizeRequestBody {
   recipeId?: unknown;
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ locals, request }) => {
+  const spaceId = requireSpaceId(locals);
   let body: FinalizeRequestBody;
   try {
     body = await request.json();
@@ -70,9 +72,9 @@ export const POST: RequestHandler = async ({ request }) => {
   // (nur Modus 'improve'). finalizeRecipe baut daraus selbst den strikten
   // Finalize-Prompt („gib AUSSCHLIESSLICH JSON aus") — der Chat-Prompt hat
   // hier nichts zu suchen, da er die KI ins Gesprächsverhalten drängt.
-  const categories = await listCategories();
-  const tools = await listKitchenTools();
-  const tagNames = (await listTags()).map((t) => t.name);
+  const categories = await listCategories(spaceId);
+  const tools = await listKitchenTools(spaceId);
+  const tagNames = (await listTags(spaceId)).map((t) => t.name);
   let contextRecipe = undefined;
   if (mode === 'improve') {
     const recipeId =
@@ -84,17 +86,17 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!recipeId || !Number.isFinite(recipeId)) {
       throw error(422, 'Für Modus "improve" wird "recipeId" benötigt.');
     }
-    contextRecipe = await getRecipe(recipeId);
+    contextRecipe = await getRecipe(spaceId, recipeId);
     if (!contextRecipe) throw error(404, 'Rezept nicht gefunden.');
   }
 
-  const apiKey = await getApiKey();
+  const apiKey = await getApiKey(spaceId);
   if (!apiKey || apiKey.trim() === '') {
     return json({ error: 'Kein API-Key konfiguriert.', code: 'no_api_key' }, { status: 400 });
   }
 
   try {
-    const recipe = await finalizeRecipe(messages, categories, tools, tagNames, contextRecipe);
+    const recipe = await finalizeRecipe(spaceId, messages, categories, tools, tagNames, contextRecipe);
     return json({ recipe });
   } catch (err) {
     if (err instanceof NoApiKeyError) {

@@ -3,6 +3,7 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { env } from '$env/dynamic/private';
 import { getRecipeImageUrl, setRecipeImageUrl } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import type { RequestHandler } from './$types';
 
 const IMAGES_DIR = resolve(env.IMAGES_DIR ?? './data/images');
@@ -15,12 +16,13 @@ const EXT_BY_TYPE: Record<string, string> = {
   'image/gif': '.gif'
 };
 
-// POST /api/recipes/[id]/image  (Token-geschützt via hooks.server.ts)
+// POST /api/recipes/[id]/image  (session-geschützt, nur eigener Space)
 // multipart/form-data, Feld "image". Überschreibt ein vorhandenes Bild.
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async ({ locals, params, request }) => {
+  const spaceId = requireSpaceId(locals);
   const id = Number(params.id);
 
-  const row = await getRecipeImageUrl(id);
+  const row = await getRecipeImageUrl(spaceId, id);
   if (!row) throw error(404, 'Rezept nicht gefunden');
 
   const form = await request.formData();
@@ -43,7 +45,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   const url = `/images/${name}`;
-  await setRecipeImageUrl(id, url);
+  await setRecipeImageUrl(spaceId, id, url);
 
   // Altes Bild aufräumen (nur eigene Uploads unter /images/)
   if (row.image_url?.startsWith('/images/')) {

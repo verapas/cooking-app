@@ -35,6 +35,8 @@
   let allIngredients = $derived(recipe.ingredients);
   let totalMin = $derived((recipe.prep_time_min ?? 0) + (recipe.cook_time_min ?? 0));
   let hasVersions = $derived(data.versions.length > 1);
+  let isPublished = $state(untrack(() => data.recipe.is_published));
+  let publishBusy = $state(false);
 
   function stepsIngredients(stepId: number) {
     return recipe.ingredients.filter((i) => i.step_id === stepId);
@@ -51,6 +53,39 @@
   function changeVersion(versionId: number) {
     selectedVersionId = versionId;
     window.location.href = `/recipe/${versionId}`;
+  }
+
+  /** Veröffentlichen/Zurückziehen im „Öffentlich“-Bereich (Phase 3). */
+  async function togglePublish() {
+    if (publishBusy) return;
+    publishBusy = true;
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/publish`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (handleUnauthorized(res)) return;
+      const data = (await res.json().catch(() => ({}))) as {
+        is_published?: boolean;
+        error?: string;
+      };
+      if (res.ok) {
+        isPublished = Boolean(data.is_published);
+      } else {
+        await Swal.fire({
+          title: 'Fehler!',
+          text: data.error || 'Veröffentlichungs-Status konnte nicht geändert werden.',
+          icon: 'error',
+          background: '#1f1a14',
+          color: '#f5ede2',
+          confirmButtonColor: '#ff5c5c'
+        });
+      }
+    } catch {
+      /* Netzwerkfehler: Status bleibt unverändert */
+    } finally {
+      publishBusy = false;
+    }
   }
 
   async function onImageChange(e: Event) {
@@ -91,7 +126,7 @@
       // Variante offen: nur diese Version ODER die ganze Familie löschen
       const result = await Swal.fire({
         title: 'Version löschen?',
-        html: `Du löschst die Variante <strong>„${recipe.version_name ?? 'Variante'}"</strong>.<br>Das Hauptrezept „${recipe.title}" bleibt dabei erhalten.`,
+        html: `Du löschst die Variante <strong>„${recipe.version_name ?? 'Variante'}“</strong>.<br>Das Hauptrezept „${recipe.title}“ bleibt dabei erhalten.`,
         icon: 'warning',
         showCancelButton: true,
         showDenyButton: true,
@@ -116,7 +151,7 @@
       // Hauptversion trägt alle Varianten (DB-Cascade) → nur alles löschen
       const result = await Swal.fire({
         title: 'Alle Versionen löschen?',
-        html: `„<strong>${recipe.title}</strong>" hat Varianten. Das Löschen der Hauptversion entfernt das komplette Rezept inklusive aller Varianten — auch einzeln nicht möglich.`,
+        html: `„<strong>${recipe.title}</strong>“ hat Varianten. Das Löschen der Hauptversion entfernt das komplette Rezept inklusive aller Varianten — auch einzeln nicht möglich.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ff5c5c',
@@ -222,6 +257,11 @@
     </button>
 
     <div class="card-body">
+      {#if isPublished}
+        <p class="pub-badge" title="Dieses Rezept ist im „Öffentlich“-Bereich für alle Nutzer sichtbar">
+          <Icon name="globe" size={13} /> Veröffentlicht
+        </p>
+      {/if}
       <h1>{recipe.title}</h1>
       {#if recipe.description}<p class="desc">{recipe.description}</p>{/if}
 
@@ -295,6 +335,17 @@
       {/if}
 
       <div class="action-group">
+        <button
+          type="button"
+          class="action-btn"
+          class:action-published={isPublished}
+          onclick={togglePublish}
+          disabled={publishBusy}
+          aria-label={isPublished ? 'Veröffentlichung zurückziehen' : 'Im „Öffentlich“-Bereich veröffentlichen'}
+          title={isPublished ? 'Veröffentlichung zurückziehen' : 'Veröffentlichen („Öffentlich“)'}
+        >
+          <Icon name="globe" size={18} />
+        </button>
         <a
           href="/recipe/{recipe.id}/edit"
           class="action-btn"
@@ -419,8 +470,21 @@
     font-size: 1.7rem;
     margin-top: 0;
   }
-  .desc {
-    color: var(--text-dim);
+  /* Veröffentlicht-Badge über dem Titel */
+  .pub-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: rgba(111, 207, 151, 0.12);
+    color: #6fcf97;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+
+  .desc {    color: var(--text-dim);
   }
   .recipe-tags {
     display: flex;
@@ -689,6 +753,17 @@
 
   .action-btn.action-ai:hover {
     background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  }
+
+  /* Veröffentlicht: globe-Button im aktivem Zustand grün hervorheben */
+  .action-btn.action-published {
+    color: #6fcf97;
+    border-color: rgba(111, 207, 151, 0.4);
+    background: rgba(111, 207, 151, 0.1);
+  }
+
+  .action-btn.action-published:hover {
+    border-color: #6fcf97;
   }
 
   /* Löschen: roter Akzent, letzter in der Gruppe */

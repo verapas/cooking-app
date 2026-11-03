@@ -3,6 +3,12 @@
 // Dünne Schicht über dem mysql2-Pool (aus db.ts), genutzt von Load-
 // Funktionen und API-Routen. Alle Funktionen sind async.
 //
+// Space-Scoping (V10): Jede Funktion erhält die spaceId des aktiven
+// Spaces (locals.space.id aus hooks.server.ts) und filtert danach —
+// Listen per WHERE space_id = ?, Mutationen/Detail-Abfragen per
+// WHERE id = ? AND space_id = ?. Das ist der IDOR-Schutz: IDs anderer
+// Spaces liefern schlicht "nicht gefunden" statt fremde Daten.
+//
 // Row-Mapping: DATETIME-Spalten werden via normalizeDates() zu ISO-
 // Strings. is_favorite kommt bereits als echtes Boolean aus MariaDB.
 
@@ -14,6 +20,8 @@ import type {
   CategoryUpdateInput,
   Ingredient,
   KitchenTool,
+  PublishedListItem,
+  PublishedRecipe,
   RecipeInput,
   RecipeListItem,
   RecipeWithDetails,
@@ -25,33 +33,38 @@ import type {
 
 // ---------- Kategorien ----------
 
-export async function listCategories(): Promise<Category[]> {
+export async function listCategories(spaceId: number): Promise<Category[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT * FROM categories ORDER BY sort_order ASC, name ASC'
+    'SELECT * FROM categories WHERE space_id = ? ORDER BY sort_order ASC, name ASC',
+    [spaceId]
   );
   return rows as unknown as Category[];
 }
 
-export async function getCategoryBySlug(slug: string): Promise<Category | null> {
+export async function getCategoryBySlug(spaceId: number, slug: string): Promise<Category | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT * FROM categories WHERE slug = ?',
-    [slug]
+    'SELECT * FROM categories WHERE space_id = ? AND slug = ?',
+    [spaceId, slug]
   );
   if (rows.length === 0) return null;
   return rows[0] as unknown as Category;
 }
 
-export async function createCategory(input: CategoryInput): Promise<number> {
-  // Upsert via eindeutigem slug (MariaDB-Syntax statt SQLite ON CONFLICT).
+export async function createCategory(spaceId: number, input: CategoryInput): Promise<number> {
+  // Upsert via eindeutigem (space_id, slug) (MariaDB-Syntax statt SQLite ON CONFLICT).
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO categories (name, slug, icon, sort_order) VALUES (?, ?, ?, ?)
+    `INSERT INTO categories (space_id, name, slug, icon, sort_order) VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name), icon = VALUES(icon), sort_order = VALUES(sort_order)`,
-    [input.name, input.slug, input.icon ?? null, input.sort_order ?? 0]
+    [spaceId, input.name, input.slug, input.icon ?? null, input.sort_order ?? 0]
   );
   return result.insertId;
 }
 
-export async function updateCategory(id: number, input: CategoryUpdateInput): Promise<boolean> {
+export async function updateCategory(
+  spaceId: number,
+  id: number,
+  input: CategoryUpdateInput
+): Promise<boolean> {
   const updates: string[] = [];
   const params: unknown[] = [];
 
@@ -74,49 +87,50 @@ export async function updateCategory(id: number, input: CategoryUpdateInput): Pr
 
   if (updates.length === 0) return false;
 
-  params.push(id);
+  params.push(id, spaceId);
   const [result] = await pool.execute<ResultSetHeader>(
-    `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`,
+    `UPDATE categories SET ${updates.join(', ')} WHERE id = ? AND space_id = ?`,
     params as never[]
   );
   return result.affectedRows > 0;
 }
 
-export async function deleteCategory(id: number): Promise<boolean> {
+export async function deleteCategory(spaceId: number, id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'DELETE FROM categories WHERE id = ?',
-    [id]
+    'DELETE FROM categories WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
 // ---------- Küchenutensilien ----------
 
-/** Alle Utensilien der Person, alphabetisch (KI-Kontext + Einstellungen). */
-export async function listKitchenTools(): Promise<KitchenTool[]> {
+/** Alle Utensilien des Spaces, alphabetisch (KI-Kontext + Einstellungen). */
+export async function listKitchenTools(spaceId: number): Promise<KitchenTool[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id, name FROM kitchen_tools ORDER BY name ASC'
+    'SELECT id, name FROM kitchen_tools WHERE space_id = ? ORDER BY name ASC',
+    [spaceId]
   );
   return rows as unknown as KitchenTool[];
 }
 
 /**
- * Legt ein Utensil an. Duplikate (case-insensitiv, dank Collation)
+ * Legt ein Utensil im Space an. Duplikate (case-insensitiv, dank Collation)
  * werden stillschweigend aktualisiert → idempotent, kein Fehler.
  */
-export async function createKitchenTool(name: string): Promise<number> {
+export async function createKitchenTool(spaceId: number, name: string): Promise<number> {
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO kitchen_tools (name) VALUES (?)
+    `INSERT INTO kitchen_tools (space_id, name) VALUES (?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-    [name]
+    [spaceId, name]
   );
   return result.insertId;
 }
 
-export async function deleteKitchenTool(id: number): Promise<boolean> {
+export async function deleteKitchenTool(spaceId: number, id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'DELETE FROM kitchen_tools WHERE id = ?',
-    [id]
+    'DELETE FROM kitchen_tools WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   return result.affectedRows > 0;
 }
@@ -124,57 +138,60 @@ export async function deleteKitchenTool(id: number): Promise<boolean> {
 // ---------- Tags ----------
 
 /**
- * Alle Tags mit Anzahl passender Rezept-FAMILIEN — Varianten zählen zum
- * Hauptrezept (COALESCE(parent, id)), passend zum Familien-Filter in
- * listRecipes. Für Filter-Popover und Einstellungen.
+ * Alle Tags des Spaces mit Anzahl passender Rezept-FAMILIEN — Varianten
+ * zählen zum Hauptrezept (COALESCE(parent, id)), passend zum Familien-
+ * Filter in listRecipes. Für Filter-Popover und Einstellungen.
  */
-export async function listTags(): Promise<TagWithCount[]> {
+export async function listTags(spaceId: number): Promise<TagWithCount[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT t.id, t.name, COUNT(DISTINCT COALESCE(r.parent_recipe_id, r.id)) AS count
      FROM tags t
      LEFT JOIN recipe_tags rt ON rt.tag_id = t.id
      LEFT JOIN recipes r ON r.id = rt.recipe_id
+     WHERE t.space_id = ?
      GROUP BY t.id, t.name
-     ORDER BY t.name ASC`
+     ORDER BY t.name ASC`,
+    [spaceId]
   );
   return rows as unknown as TagWithCount[];
 }
 
-/** Tag anlegen. Duplikate (case-insensitiv, dank Collation) werden still
- *  aktualisiert → idempotent wie createKitchenTool. */
-export async function createTag(name: string): Promise<number> {
+/** Tag im Space anlegen. Duplikate (case-insensitiv, dank Collation)
+ *  werden still aktualisiert → idempotent wie createKitchenTool. */
+export async function createTag(spaceId: number, name: string): Promise<number> {
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO tags (name) VALUES (?)
+    `INSERT INTO tags (space_id, name) VALUES (?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-    [name]
+    [spaceId, name]
   );
   if (result.insertId > 0) return result.insertId;
   // Duplikat: insertId ist 0 → vorhandene ID nachschlagen.
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id FROM tags WHERE name = ?',
-    [name]
+    'SELECT id FROM tags WHERE space_id = ? AND name = ?',
+    [spaceId, name]
   );
   return (rows[0] as { id: number }).id;
 }
 
-export async function renameTag(id: number, name: string): Promise<boolean> {
+export async function renameTag(spaceId: number, id: number, name: string): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'UPDATE tags SET name = ? WHERE id = ?',
-    [name, id]
+    'UPDATE tags SET name = ? WHERE id = ? AND space_id = ?',
+    [name, id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
 /** Tag löschen — Verknüpfungen fallen per ON DELETE CASCADE mit weg. */
-export async function deleteTag(id: number): Promise<boolean> {
+export async function deleteTag(spaceId: number, id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'DELETE FROM tags WHERE id = ?',
-    [id]
+    'DELETE FROM tags WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
-/** Tag-Namen eines Rezepts (für getRecipe/Edit-Formular). */
+/** Tag-Namen eines Rezepts (für getRecipe/Edit-Formular).
+ *  Nur intern nach erfolgter Space-Prüfung des Rezepts aufrufen. */
 export async function getRecipeTags(recipeId: number): Promise<string[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT t.name FROM tags t
@@ -208,27 +225,28 @@ export function normalizeTagNames(raw: unknown): string[] {
 }
 
 /**
- * Setzt die Tags eines Rezepts vollständig: Get-or-Create je Name, dann
- * Links erneuern (Delete + Insert). Läuft INNERHALB der Transaktion von
- * createRecipe/updateRecipe (conn) — sonst mit pool.
+ * Setzt die Tags eines Rezepts vollständig: Get-or-Create je Name im
+ * Space, dann Links erneuern (Delete + Insert). Läuft INNERHALB der
+ * Transaktion von createRecipe/updateRecipe (conn) — sonst mit pool.
  */
 async function syncRecipeTags(
   conn: PoolConnection | Pool,
+  spaceId: number,
   recipeId: number,
   names: string[]
 ): Promise<void> {
   await conn.execute('DELETE FROM recipe_tags WHERE recipe_id = ?', [recipeId]);
   for (const name of names) {
     const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO tags (name) VALUES (?)
+      `INSERT INTO tags (space_id, name) VALUES (?, ?)
        ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-      [name]
+      [spaceId, name]
     );
     let tagId = result.insertId;
     if (tagId === 0) {
       const [rows] = await conn.query<RowDataPacket[]>(
-        'SELECT id FROM tags WHERE name = ?',
-        [name]
+        'SELECT id FROM tags WHERE space_id = ? AND name = ?',
+        [spaceId, name]
       );
       tagId = (rows[0] as { id: number }).id;
     }
@@ -241,15 +259,18 @@ async function syncRecipeTags(
 
 // ---------- Rezepte: Listen ----------
 
-export async function listRecipes(opts?: {
-  categoryId?: number;
-  q?: string;
-  tagIds?: number[];
-  limit?: number;
-  offset?: number;
-}): Promise<RecipeListItem[]> {
-  const where: string[] = ['r.parent_recipe_id IS NULL'];
-  const params: unknown[] = [];
+export async function listRecipes(
+  spaceId: number,
+  opts?: {
+    categoryId?: number;
+    q?: string;
+    tagIds?: number[];
+    limit?: number;
+    offset?: number;
+  }
+): Promise<RecipeListItem[]> {
+  const where: string[] = ['r.space_id = ?', 'r.parent_recipe_id IS NULL'];
+  const params: unknown[] = [spaceId];
   if (opts?.categoryId != null) {
     where.push('r.category_id = ?');
     params.push(opts.categoryId);
@@ -289,18 +310,20 @@ export async function listRecipes(opts?: {
       ...normalized,
       is_favorite: Boolean(normalized.is_favorite),
       is_pinned: Boolean(normalized.is_pinned),
+      is_published: Boolean(normalized.is_published),
       tags: [] as string[] // Listen-Views zeigen keine Tags (nur Detail/Edit)
     } as unknown as RecipeListItem;
   });
 }
 
-export async function listFavorites(): Promise<RecipeListItem[]> {
+export async function listFavorites(spaceId: number): Promise<RecipeListItem[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.*, c.name AS category_name, c.slug AS category_slug
      FROM recipes r
      LEFT JOIN categories c ON c.id = r.category_id
-     WHERE r.is_favorite = 1 AND r.parent_recipe_id IS NULL
-     ORDER BY r.is_pinned DESC, r.pinned_at DESC, r.created_at DESC`
+     WHERE r.space_id = ? AND r.is_favorite = 1 AND r.parent_recipe_id IS NULL
+     ORDER BY r.is_pinned DESC, r.pinned_at DESC, r.created_at DESC`,
+    [spaceId]
   );
 
   return rows.map((r) => {
@@ -309,61 +332,60 @@ export async function listFavorites(): Promise<RecipeListItem[]> {
       ...normalized,
       is_favorite: Boolean(normalized.is_favorite),
       is_pinned: Boolean(normalized.is_pinned),
+      is_published: Boolean(normalized.is_published),
       tags: [] as string[] // Listen-Views zeigen keine Tags (nur Detail/Edit)
     } as unknown as RecipeListItem;
   });
 }
 
-export async function toggleFavorite(id: number): Promise<boolean> {
+export async function toggleFavorite(spaceId: number, id: number): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT is_favorite FROM recipes WHERE id = ?',
-    [id]
+    'SELECT is_favorite FROM recipes WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   if (rows.length === 0) return false;
 
   const newFavorite = rows[0].is_favorite ? 0 : 1;
   const [result] = await pool.execute<ResultSetHeader>(
-    'UPDATE recipes SET is_favorite = ? WHERE id = ?',
-    [newFavorite, id]
+    'UPDATE recipes SET is_favorite = ? WHERE id = ? AND space_id = ?',
+    [newFavorite, id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
 /** Pin umschalten: beim Anpinnen pinned_at setzen (zuoberst sortiert), beim Lösen auf NULL. */
-export async function togglePin(id: number): Promise<boolean> {
+export async function togglePin(spaceId: number, id: number): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT is_pinned FROM recipes WHERE id = ?',
-    [id]
+    'SELECT is_pinned FROM recipes WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   if (rows.length === 0) return false;
 
   if (rows[0].is_pinned) {
     const [result] = await pool.execute<ResultSetHeader>(
-      'UPDATE recipes SET is_pinned = 0, pinned_at = NULL WHERE id = ?',
-      [id]
+      'UPDATE recipes SET is_pinned = 0, pinned_at = NULL WHERE id = ? AND space_id = ?',
+      [id, spaceId]
     );
     return result.affectedRows > 0;
   }
   const [result] = await pool.execute<ResultSetHeader>(
-    'UPDATE recipes SET is_pinned = 1, pinned_at = NOW() WHERE id = ?',
-    [id]
+    'UPDATE recipes SET is_pinned = 1, pinned_at = NOW() WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
-export async function countRecipes(): Promise<number> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT COUNT(*) AS n FROM recipes WHERE parent_recipe_id IS NULL'
-  );
-  return Number((rows[0] as { n: number }).n);
-}
-
 // ---------- Rezepte: Versioning ----------
 
-export async function getMainRecipeId(recipeId: number): Promise<number | null> {
+/** Hauptrezept-ID einer Familie im eigenen Space — null, wenn das Rezept
+ *  (oder sein Parent) nicht zum Space gehört. */
+export async function getMainRecipeId(
+  spaceId: number,
+  recipeId: number
+): Promise<number | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT parent_recipe_id FROM recipes WHERE id = ?',
-    [recipeId]
+    'SELECT parent_recipe_id FROM recipes WHERE id = ? AND space_id = ?',
+    [recipeId, spaceId]
   );
   if (rows.length === 0) return null;
   const parent = (rows[0] as { parent_recipe_id: number | null }).parent_recipe_id;
@@ -371,10 +393,11 @@ export async function getMainRecipeId(recipeId: number): Promise<number | null> 
   return parent;
 }
 
-export async function listRecipeVersions(parentId: number): Promise<RecipeVersion[]> {
+export async function listRecipeVersions(spaceId: number, parentId: number): Promise<RecipeVersion[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, version_name FROM recipes WHERE id = ? OR parent_recipe_id = ? ORDER BY id ASC`,
-    [parentId, parentId]
+    `SELECT id, version_name FROM recipes
+     WHERE space_id = ? AND (id = ? OR parent_recipe_id = ?) ORDER BY id ASC`,
+    [spaceId, parentId, parentId]
   );
 
   return (rows as { id: number; version_name: string | null }[]).map((v) => ({
@@ -384,25 +407,21 @@ export async function listRecipeVersions(parentId: number): Promise<RecipeVersio
   }));
 }
 
-export async function getRecipeWithVersion(
-  recipeId: number,
-  versionId: number
-): Promise<RecipeWithDetails | null> {
-  return getRecipe(versionId);
-}
-
-export async function getEffectiveImageUrl(recipeId: number): Promise<string | null> {
+export async function getEffectiveImageUrl(
+  spaceId: number,
+  recipeId: number
+): Promise<string | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT image_url, parent_recipe_id FROM recipes WHERE id = ?',
-    [recipeId]
+    'SELECT image_url, parent_recipe_id FROM recipes WHERE id = ? AND space_id = ?',
+    [recipeId, spaceId]
   );
   if (rows.length === 0) return null;
   const row = rows[0] as { image_url: string | null; parent_recipe_id: number | null };
   if (row.image_url) return row.image_url;
   if (row.parent_recipe_id != null) {
     const [parentRows] = await pool.query<RowDataPacket[]>(
-      'SELECT image_url FROM recipes WHERE id = ?',
-      [row.parent_recipe_id]
+      'SELECT image_url FROM recipes WHERE id = ? AND space_id = ?',
+      [row.parent_recipe_id, spaceId]
     );
     if (parentRows.length === 0) return null;
     return (parentRows[0] as { image_url: string | null }).image_url ?? null;
@@ -412,13 +431,13 @@ export async function getEffectiveImageUrl(recipeId: number): Promise<string | n
 
 // ---------- Rezepte: Detail ----------
 
-export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
+export async function getRecipe(spaceId: number, id: number): Promise<RecipeWithDetails | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.*, c.id AS c_id, c.name AS c_name, c.slug AS c_slug, c.icon AS c_icon
      FROM recipes r
      LEFT JOIN categories c ON c.id = r.category_id
-     WHERE r.id = ?`,
-    [id]
+     WHERE r.id = ? AND r.space_id = ?`,
+    [id, spaceId]
   );
   if (rows.length === 0) return null;
 
@@ -429,9 +448,10 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
     c_icon: string | null;
     is_favorite: number | boolean;
     is_pinned: number | boolean;
+    is_published: number | boolean;
   };
 
-  const { c_id, c_name, c_slug, c_icon, is_favorite, is_pinned, ...rest } = recipe;
+  const { c_id, c_name, c_slug, c_icon, is_favorite, is_pinned, is_published, ...rest } = recipe;
   const normalizedRest = normalizeDates(rest as Record<string, unknown>, RECIPE_DATES);
 
   const [ingredientRows] = await pool.query<RowDataPacket[]>(
@@ -446,9 +466,10 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
   const tagNames = await getRecipeTags(id);
 
   return {
-    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite' | 'is_pinned' | 'tags'>),
+    ...(normalizedRest as Omit<RecipeWithDetails, 'category' | 'ingredients' | 'steps' | 'is_favorite' | 'is_pinned' | 'is_published' | 'tags'>),
     is_favorite: Boolean(is_favorite),
     is_pinned: Boolean(is_pinned),
+    is_published: Boolean(is_published),
     tags: tagNames,
     category:
       c_id != null
@@ -461,12 +482,21 @@ export async function getRecipe(id: number): Promise<RecipeWithDetails | null> {
 
 // ---------- Rezepte: Schreiben ----------
 
-async function resolveCategoryId(input: RecipeInput): Promise<number | null> {
-  if (input.category_id != null) return input.category_id;
+/** Löst die Kategorie des Inputs zu einer ID im SELBEN Space auf.
+ *  Direkt übergebene category_ids aus anderen Spaces werden zu null. */
+async function resolveCategoryId(spaceId: number, input: RecipeInput): Promise<number | null> {
+  if (input.category_id != null) {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM categories WHERE id = ? AND space_id = ?',
+      [input.category_id, spaceId]
+    );
+    if (rows.length === 0) return null;
+    return (rows[0] as { id: number }).id;
+  }
   if (input.category_slug) {
     const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM categories WHERE slug = ?',
-      [input.category_slug]
+      'SELECT id FROM categories WHERE slug = ? AND space_id = ?',
+      [input.category_slug, spaceId]
     );
     if (rows.length === 0) return null;
     return (rows[0] as { id: number }).id;
@@ -474,7 +504,25 @@ async function resolveCategoryId(input: RecipeInput): Promise<number | null> {
   return null;
 }
 
-export async function createRecipe(input: RecipeInput): Promise<number> {
+/** Prüft, dass ein Rezept (z. B. als parent_recipe_id angegeben) im
+ *  eigenen Space existiert — Varianten dürfen nur innerhalb eines
+ *  Spaces hängen. */
+export async function recipeExistsInSpace(
+  spaceId: number,
+  recipeId: number
+): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id FROM recipes WHERE id = ? AND space_id = ?',
+    [recipeId, spaceId]
+  );
+  return rows.length > 0;
+}
+
+export async function createRecipe(
+  spaceId: number,
+  input: RecipeInput,
+  createdBy: number | null
+): Promise<number> {
   // Transaktion: Rezept + Steps + Ingredients atomar anlegen.
   const conn = await pool.getConnection();
   try {
@@ -482,28 +530,32 @@ export async function createRecipe(input: RecipeInput): Promise<number> {
 
     const [result] = await conn.execute<ResultSetHeader>(
       `INSERT INTO recipes
-       (title, description, category_id, base_servings, prep_time_min, cook_time_min, image_url, source, parent_recipe_id, version_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (space_id, title, description, category_id, base_servings, prep_time_min, cook_time_min, image_url, source, parent_recipe_id, version_name, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        spaceId,
         input.title,
         input.description ?? null,
-        await resolveCategoryId(input),
+        await resolveCategoryId(spaceId, input),
         input.base_servings ?? 4,
         input.prep_time_min ?? null,
         input.cook_time_min ?? null,
         input.image_url ?? null,
         input.source ?? null,
         input.parent_recipe_id ?? null,
-        input.version_name ?? null
+        input.version_name ?? null,
+        createdBy
       ]
     );
     const recipeId = result.insertId;
 
-    // Bild vom Parent erben, falls keins gesetzt und parent existiert.
+    // Bild vom Parent erben, falls keins gesetzt und parent existiert
+    // (Parent-Validierung macht die aufrufende Route — hier zusätzlich
+    // space-gebunden, damit kein fremdes Bild durchrutscht).
     if (input.parent_recipe_id && !input.image_url) {
       const [parentRows] = await conn.query<RowDataPacket[]>(
-        'SELECT image_url FROM recipes WHERE id = ?',
-        [input.parent_recipe_id]
+        'SELECT image_url FROM recipes WHERE id = ? AND space_id = ?',
+        [input.parent_recipe_id, spaceId]
       );
       if (parentRows.length > 0) {
         const parentImage = (parentRows[0] as { image_url: string | null }).image_url;
@@ -517,7 +569,7 @@ export async function createRecipe(input: RecipeInput): Promise<number> {
     }
 
     await insertChildren(conn, recipeId, input);
-    await syncRecipeTags(conn, recipeId, input.tags ?? []);
+    await syncRecipeTags(conn, spaceId, recipeId, input.tags ?? []);
     await conn.commit();
     return recipeId;
   } catch (err) {
@@ -528,7 +580,11 @@ export async function createRecipe(input: RecipeInput): Promise<number> {
   }
 }
 
-export async function updateRecipe(id: number, input: RecipeInput): Promise<boolean> {
+export async function updateRecipe(
+  spaceId: number,
+  id: number,
+  input: RecipeInput
+): Promise<boolean> {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -537,18 +593,19 @@ export async function updateRecipe(id: number, input: RecipeInput): Promise<bool
       `UPDATE recipes SET
          title = ?, description = ?, category_id = ?, base_servings = ?,
          prep_time_min = ?, cook_time_min = ?, image_url = ?, source = ?, version_name = ?
-       WHERE id = ?`,
+       WHERE id = ? AND space_id = ?`,
       [
         input.title,
         input.description ?? null,
-        await resolveCategoryId(input),
+        await resolveCategoryId(spaceId, input),
         input.base_servings ?? 4,
         input.prep_time_min ?? null,
         input.cook_time_min ?? null,
         input.image_url ?? null,
         input.source ?? null,
         input.version_name ?? null,
-        id
+        id,
+        spaceId
       ]
     );
     if (result.affectedRows === 0) {
@@ -561,7 +618,7 @@ export async function updateRecipe(id: number, input: RecipeInput): Promise<bool
     await conn.execute('DELETE FROM steps WHERE recipe_id = ?', [id]);
     await conn.execute('DELETE FROM ingredients WHERE recipe_id = ?', [id]);
     await insertChildren(conn, id, input);
-    await syncRecipeTags(conn, id, input.tags ?? []);
+    await syncRecipeTags(conn, spaceId, id, input.tags ?? []);
     await conn.commit();
     return true;
   } catch (err) {
@@ -572,10 +629,10 @@ export async function updateRecipe(id: number, input: RecipeInput): Promise<bool
   }
 }
 
-export async function deleteRecipe(id: number): Promise<boolean> {
+export async function deleteRecipe(spaceId: number, id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'DELETE FROM recipes WHERE id = ?',
-    [id]
+    'DELETE FROM recipes WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   return result.affectedRows > 0;
 }
@@ -587,17 +644,20 @@ export async function deleteRecipe(id: number): Promise<boolean> {
  * ein combined DELETE (id = ? OR parent_recipe_id = ?) scheitert am
  * selbst-referenzierenden FK mit „Can't find record" (InnoDB 1032).
  */
-export async function deleteRecipeFamily(recipeId: number): Promise<boolean> {
-  const mainId = await getMainRecipeId(recipeId);
+export async function deleteRecipeFamily(spaceId: number, recipeId: number): Promise<boolean> {
+  const mainId = await getMainRecipeId(spaceId, recipeId);
   if (!mainId) return false;
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    await conn.execute('DELETE FROM recipes WHERE parent_recipe_id = ?', [mainId]);
+    await conn.execute('DELETE FROM recipes WHERE parent_recipe_id = ? AND space_id = ?', [
+      mainId,
+      spaceId
+    ]);
     const [result] = await conn.execute<ResultSetHeader>(
-      'DELETE FROM recipes WHERE id = ?',
-      [mainId]
+      'DELETE FROM recipes WHERE id = ? AND space_id = ?',
+      [mainId, spaceId]
     );
     await conn.commit();
     return result.affectedRows > 0;
@@ -641,29 +701,273 @@ async function insertChildren(conn: PoolConnection, recipeId: number, input: Rec
 // Bislang rohes SQL im +server.ts; hier zentralisiert, damit das
 // rohe-SQL-Problem nur noch an einer Stelle existiert.
 
-export async function getRecipeImageUrl(id: number): Promise<{ id: number; image_url: string | null } | null> {
+export async function getRecipeImageUrl(
+  spaceId: number,
+  id: number
+): Promise<{ id: number; image_url: string | null } | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id, image_url FROM recipes WHERE id = ?',
-    [id]
+    'SELECT id, image_url FROM recipes WHERE id = ? AND space_id = ?',
+    [id, spaceId]
   );
   if (rows.length === 0) return null;
   return rows[0] as unknown as { id: number; image_url: string | null };
 }
 
-export async function setRecipeImageUrl(id: number, imageUrl: string): Promise<boolean> {
+export async function setRecipeImageUrl(
+  spaceId: number,
+  id: number,
+  imageUrl: string
+): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
-    'UPDATE recipes SET image_url = ? WHERE id = ?',
-    [imageUrl, id]
+    'UPDATE recipes SET image_url = ? WHERE id = ? AND space_id = ?',
+    [imageUrl, id, spaceId]
   );
   return result.affectedRows > 0;
 }
 
-// Hilfsfunktion für seed.ts: Rezept anhand des Titels finden (Parent-Lookup).
-export async function getRecipeIdByTitle(title: string): Promise<number | null> {
+// ---------- Bild-Zugriff (für /images/[file]) ----------
+
+/**
+ * Prüft, ob ein Rezept-Bild für den Benutzer sichtbar ist: Mitglied des
+ * Spaces ODER Rezept veröffentlicht (Phase 3 „Öffentlich"). filePath ist
+ * der URL-Teil nach /images/ (z. B. "recipe-12-1730000000000.jpg").
+ * Gibt false zurück, wenn der Dateiname keinem Rezept zuzuordnen ist.
+ */
+export async function canViewRecipeImage(
+  userId: number,
+  filePath: string
+): Promise<boolean> {
+  const match = filePath.match(/^recipe-(\d+)-/);
+  if (!match) return false;
+  const recipeId = Number(match[1]);
+
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id FROM recipes WHERE title = ? AND parent_recipe_id IS NULL LIMIT 1',
-    [title]
+    `SELECT r.is_published,
+            EXISTS (
+              SELECT 1 FROM space_members sm
+              WHERE sm.space_id = r.space_id AND sm.user_id = ?
+            ) AS is_member
+     FROM recipes r WHERE r.id = ?`,
+    [userId, recipeId]
+  );
+  if (rows.length === 0) return false;
+  const row = rows[0] as { is_published: number | boolean; is_member: number | boolean };
+  return Boolean(row.is_published) || Boolean(row.is_member);
+}
+
+// ---------- Öffentlicher Bereich (Phase 3 „Öffentlich") ----------
+// Veröffentlichte Rezepte sind für ALLE eingeloggten Benutzer sichtbar
+// (über Spaces hinweg), mit Attribution von Urheber und Space. Das
+// Publish-Flag selbst wird space-scoped gesetzt (nur eigene Rezepte).
+
+/** Anzeigename eines Urhebers: name || username || email. */
+function authorDisplayName(row: {
+  name: string | null;
+  username: string | null;
+  email: string | null;
+}): string | null {
+  return row.name ?? row.username ?? row.email ?? null;
+}
+
+/** SQL-Schnipsel + Mapper für veröffentlichte Rezepte mit Attribution. */
+const PUBLISHED_SELECT = `
+  SELECT r.*, c.id AS c_id, c.name AS category_name, c.slug AS category_slug,
+         c.icon AS c_icon, u.name AS u_name, u.username AS u_username,
+         u.email AS u_email, s.name AS space_name
+  FROM recipes r
+  LEFT JOIN categories c ON c.id = r.category_id
+  LEFT JOIN users u ON u.id = r.created_by
+  JOIN spaces s ON s.id = r.space_id`;
+
+interface PublishedRow extends Record<string, unknown> {
+  u_name: string | null;
+  u_username: string | null;
+  u_email: string | null;
+  space_name: string;
+}
+
+function mapPublishedRow(row: PublishedRow): PublishedListItem {
+  const normalized = normalizeDates(row, RECIPE_DATES);
+  return {
+    ...normalized,
+    is_favorite: Boolean(normalized.is_favorite),
+    is_pinned: Boolean(normalized.is_pinned),
+    is_published: Boolean(normalized.is_published),
+    author_name: authorDisplayName({
+      name: row.u_name,
+      username: row.u_username,
+      email: row.u_email
+    }),
+    tags: [] as string[]
+  } as unknown as PublishedListItem;
+}
+
+/** Alle veröffentlichten Rezepte (aller Spaces), neueste zuerst. */
+export async function listPublishedRecipes(q?: string): Promise<PublishedListItem[]> {
+  const params: unknown[] = [];
+  let where = 'WHERE r.is_published = 1';
+  if (q) {
+    where += ' AND (r.title LIKE ? OR r.description LIKE ?)';
+    params.push(`%${q}%`, `%${q}%`);
+  }
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `${PUBLISHED_SELECT}
+     ${where}
+     ORDER BY r.published_at DESC, r.id DESC
+     LIMIT 200`,
+    params
+  );
+  return rows.map((r) => mapPublishedRow(r as unknown as PublishedRow));
+}
+
+/**
+ * Veröffentlichtes Rezept mit Steps/Zutaten/Tags + Attribution — oder
+ * null (nicht gefunden ODER nicht veröffentlicht).
+ */
+export async function getPublishedRecipe(id: number): Promise<PublishedRecipe | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `${PUBLISHED_SELECT}
+     WHERE r.id = ? AND r.is_published = 1`,
+    [id]
   );
   if (rows.length === 0) return null;
-  return (rows[0] as { id: number }).id;
+  const row = rows[0] as unknown as PublishedRow & {
+    c_id: number | null;
+    category_name: string | null;
+    category_slug: string | null;
+    c_icon: string | null;
+  };
+
+  const [ingredientRows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM ingredients WHERE recipe_id = ? ORDER BY sort_order ASC, id ASC',
+    [id]
+  );
+  const [stepRows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM steps WHERE recipe_id = ? ORDER BY `order` ASC, id ASC',
+    [id]
+  );
+  const tagNames = await getRecipeTags(id);
+
+  const { u_name, u_username, u_email, ...rest } = row;
+  const normalized = normalizeDates(rest, RECIPE_DATES);
+  return {
+    ...(normalized as object),
+    is_favorite: Boolean(normalized.is_favorite),
+    is_pinned: Boolean(normalized.is_pinned),
+    is_published: true,
+    author_name: authorDisplayName({ name: u_name, username: u_username, email: u_email }),
+    tags: tagNames,
+    category:
+      row.c_id != null
+        ? { id: row.c_id, name: row.category_name!, slug: row.category_slug!, icon: row.c_icon }
+        : null,
+    ingredients: ingredientRows as unknown as Ingredient[],
+    steps: stepRows as unknown as Step[]
+  } as unknown as PublishedRecipe;
+}
+
+/** Veröffentlichen/Zurückziehen — nur im eigenen Space (IDOR-Schutz). */
+export async function togglePublish(spaceId: number, id: number): Promise<boolean | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT is_published FROM recipes WHERE id = ? AND space_id = ?',
+    [id, spaceId]
+  );
+  if (rows.length === 0) return null;
+
+  if (rows[0].is_published) {
+    await pool.execute(
+      'UPDATE recipes SET is_published = 0, published_at = NULL WHERE id = ? AND space_id = ?',
+      [id, spaceId]
+    );
+    return false;
+  }
+  await pool.execute(
+    'UPDATE recipes SET is_published = 1, published_at = NOW() WHERE id = ? AND space_id = ?',
+    [id, spaceId]
+  );
+  return true;
+}
+
+/**
+ * Kopiert ein (vom Aufrufer auf Sichtbarkeit geprüftes) Rezept als neue,
+ * unveröffentlichte Hauptversion in den Ziel-Space: Schritte, Zutaten und
+ * Tags vollständig (Tags per Get-or-Create im Ziel-Space). Die Kategorie
+ * wird über den slug abgebildet — existiert sie im Ziel-Space nicht, bleibt
+ * das Rezept uncategorized. Das Bild verweist zunächst auf dieselbe Datei;
+ * die aufrufende Route dupliziert die Datei (sonst bricht die Kopie, wenn
+ * das Original gelöscht wird).
+ */
+export async function copyRecipeIntoSpace(
+  targetSpaceId: number,
+  source: RecipeWithDetails,
+  copiedBy: number | null
+): Promise<number> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Kategorie nach slug im Ziel-Space suchen (Categories sind pro Space).
+    let categoryId: number | null = null;
+    if (source.category) {
+      const [catRows] = await conn.query<RowDataPacket[]>(
+        'SELECT id FROM categories WHERE space_id = ? AND slug = ?',
+        [targetSpaceId, source.category.slug]
+      );
+      if (catRows.length > 0) categoryId = (catRows[0] as { id: number }).id;
+    }
+
+    const [result] = await conn.execute<ResultSetHeader>(
+      `INSERT INTO recipes
+       (space_id, title, description, category_id, base_servings, prep_time_min,
+        cook_time_min, image_url, source, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        targetSpaceId,
+        source.title,
+        source.description ?? null,
+        categoryId,
+        source.base_servings,
+        source.prep_time_min ?? null,
+        source.cook_time_min ?? null,
+        source.image_url ?? null,
+        source.source ?? null,
+        copiedBy
+      ]
+    );
+    const newId = result.insertId;
+
+    // Steps kopieren und alte step_id → neue mappen (Zutaten hängen dran).
+    const stepIdMap = new Map<number, number>();
+    const sortedSteps = [...source.steps].sort((a, b) => a.order - b.order);
+    for (const s of sortedSteps) {
+      const [stepRes] = await conn.execute<ResultSetHeader>(
+        'INSERT INTO steps (recipe_id, `order`, instruction, duration_sec) VALUES (?, ?, ?, ?)',
+        [newId, s.order, s.instruction, s.duration_sec ?? null]
+      );
+      stepIdMap.set(s.id, stepRes.insertId);
+    }
+    for (const ing of source.ingredients) {
+      await conn.execute<ResultSetHeader>(
+        `INSERT INTO ingredients (recipe_id, step_id, name, quantity, unit, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          newId,
+          ing.step_id != null ? stepIdMap.get(ing.step_id) ?? null : null,
+          ing.name,
+          ing.quantity ?? null,
+          ing.unit ?? null,
+          ing.sort_order
+        ]
+      );
+    }
+
+    await syncRecipeTags(conn, targetSpaceId, newId, source.tags);
+    await conn.commit();
+    return newId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }

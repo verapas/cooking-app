@@ -39,10 +39,21 @@ und `pnpm dev` laufen lassen.
 ```
 src/lib/server/        # NUR server-seitig (nie vom Client importieren!)
   db.ts                # mysql2-Pool (Singleton) + Date-Helper (alle async)
-  queries.ts           # alle Query-/Mutations-Funktionen (alle async)
+  queries.ts           # alle Query-/Mutations-Funktionen (alle async,
+                       # ALLE space-scoped — spaceId als erster Parameter)
   auth.ts              # OIDC/Keycloak-Login + DB-Sessions (users/sessions,
-                       # Rolling-TTL, ID-Token-Validierung via jose/JWKS)
-  settings.ts          # Key/Value-Settings (settings-Tabelle) + KI-Komfort-Helper
+                       # Rolling-TTL, ID-Token-Validierung via jose/JWKS);
+                       # getSession liefert is_admin + aktiven Space mit
+  spaces.ts            # Space-Verwaltung (V10): resolveActiveSpace,
+                       # requireSpaceId, persönlicher Space + Standard-
+                       # Kategorien beim Erstlogin (Provisioning)
+  admin.ts             # Admin-Queries für /admin (nur is_admin): User-/
+                       # Space-Listen, Memberships, is_admin, Space mit
+                       # Content löschen, requireAdmin-Guard
+  keycloakAdmin.ts     # Optional: Keycloak Admin REST API (Service-Account
+                       # mit manage-users) — Benutzer aus der App anlegen
+  settings.ts          # Key/Value-Settings PRO SPACE (settings-Tabelle)
+                       # + KI-Komfort-Helper
   ai.ts                # KI-Integration (provider-unabhängig): Streaming + Finalize
 src/lib/components/    # UI-Komponenten
   PWAInstall.svelte    # PWA-Install-Button
@@ -62,19 +73,34 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /chat/               # KI-Chat (?recipe=<id> = improve-Modus)
   /settings/           # KI-Einstellungen (API-Key, Modell, Base-URL) +
                        # Küchenutensilien (/tools) + Tag-Verwaltung (/tags)
-  /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>)
+  /admin/              # Verwaltung (nur users.is_admin): Benutzerliste,
+                       # Benutzer erstellen (via Keycloak-Admin-API, siehe
+                       # keycloakAdmin.ts), Spaces anlegen/umbenennen/
+                       # löschen (mit Content), Mitgliedschaften + Rollen,
+                       # aktiven Space setzen, is_admin schalten
+  /public/             # „Öffentlich"-Bereich (Phase 3): veröffentlichte
+                       # Rezepte aller Spaces (Attribution von/Space),
+                       # /public/[id] = schreibgeschützte Detailansicht mit
+                       # „In meinen Space kopieren"
+  /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>;
+                       # globe-Button = veröffentlichen/zurückziehen)
   /recipe/[id]/edit/   # Rezept-Bearbeitung
   /auth/               # OIDC-Login: /auth/login (Redirect zu Keycloak),
                        # /auth/callback (Code↔Token, Session anlegen),
                        # /auth/logout (komplett: App-Session + Keycloak-SSO)
   /api/                # REST-API-Endpunkte
   /images/             # Bild-Auslieferung
-src/hooks.server.ts    # Kategorie-Seeder beim ersten Request + Login-Schutz:
-                       # Session prüfen → locals.user; ohne Session Redirect
-                       # zu /auth/login (Seiten) bzw. 401-JSON (APIs)
+src/hooks.server.ts    # Login-Schutz: Session prüfen → locals.user +
+                       # locals.space (aktiver Space; beim Erstlogin wird
+                       # automatisch ein persönlicher Space provisioniert
+                       # — inkl. Standard-Kategorien, siehe spaces.ts).
+                       # Ohne Session Redirect zu /auth/login (Seiten)
+                       # bzw. 401-JSON (APIs)
 db/migration/          # Flyway-SQL-Scripts (V1__init_schema.sql etc.) — landen
                        # im Migrator-Image (Dockerfile-Target "migrator"), nicht
                        # per Bind-Mount auf dem Server; die App selbst migriert nie
+scripts/mock-keycloak.cjs # Mini-Mock der Keycloak-Admin-API (Token+User-Create)
+                       # für lokale E2E-Tests der Admin-Benutzer-Erstellung
 vite.config.ts         # Vite + PWA-Konfiguration
 ```
 
@@ -87,6 +113,15 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Niemals `$lib/server/*` in Client-Komponenten importieren.
 - **Alle Query-/Auth-Funktionen sind async** (mysql2-Pool). Aufrufe in Load-Funktionen
   und API-Routen müssen `await` sein — sonst erhält man Promises statt Daten.
+- **Multi-Space (V10)**: Alle Inhaltsdaten sind pro Space isoliert. Der Hook legt den
+  aktiven Space in `locals.space`; Load-Funktionen/API-Routen holen sich die ID via
+  `requireSpaceId(locals)` aus `src/lib/server/spaces.ts` und geben sie an JEDE
+  Query-Funktion weiter (erster Parameter). Mutationen prüfen `WHERE id = ? AND
+  space_id = ?` (IDOR-Schutz) — ein Fremd-Space-ID liefert 404, nie fremde Daten.
+  Neuer Keycloak-User → beim ersten Request automatisch persönlicher Space +
+  Standard-Kategorien (`resolveActiveSpace`/`createPersonalSpace`). Bilder unter
+  `/images/[file]` sind nur für Space-Mitglieder sichtbar (oder wenn das Rezept
+  veröffentlicht ist — `is_published`, genutzt ab Phase 3 „Öffentlich").
 - **App-Login via OIDC/Keycloak** (V9): Authorization Code Flow mit PKCE gegen
   Keycloak, implementiert in `src/lib/server/auth.ts` (ohne Auth-Library —
   `jose` nur für die ID-Token-Validierung via JWKS). DB-gestützte Sessions
@@ -135,10 +170,24 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Profildaten aus dem ID-Token — keine Passwörter) und `sessions` (Token-Hash als
   PK, `id_token` für den Logout-Hint, `expires_at` mit Rolling-Refresh;
   FK → users mit CASCADE).
-- **Settings** (V2-Tabelle + V3-Werte): `settings` (`key`, `value`, `updated_at`) — Key/Value
-  für App-Konfiguration. Aktuell: `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL`
-  (z. B. `glm-5.2`) und `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`).
-  Gelesen/geschrieben via `src/lib/server/settings.ts`.
+- **Settings** (V2-Tabelle + V3-Werte, seit V10 pro Space): `settings`
+  (`space_id`, `key`, `value`, `updated_at`) — Key/Value pro Space. Aktuell:
+  `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL` (z. B. `glm-5.2`) und
+  `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`). Jeder Space hat seine
+  eigene KI-Konfiguration (Freunde bringen ihren eigenen Key mit). Gelesen/
+  geschrieben via `src/lib/server/settings.ts` (Funktionen nehmen spaceId).
+- **Spaces** (V10): `spaces` (id, name) + `space_members` (space_id, user_id,
+  role ENUM owner|member, PK (space_id,user_id), CASCADE auf beide Seiten).
+  `users.active_space_id` (FK, SET NULL) sagt, welcher Space aktiv ist;
+  `users.is_admin` (App-Admin für Phase 2 Benutzerverwaltung; V10-Backfill
+  setzt den frühesten User auf Admin). `categories`, `tags`, `kitchen_tools`,
+  `recipes` und `settings` haben je eine `space_id` NOT NULL (FK → spaces,
+  RESTRICT — Space-Löschen erfordert vorheriges Aufräumen des Contents).
+  UNIQUE-Keys sind space-lokal: `(space_id, slug)` bei Kategorien,
+  `(space_id, name)` bei Tags/Utensilien, PK `(space_id, key)` bei Settings.
+  `recipes` zusätzlich: `is_published`/`published_at` (Phase 3 „Öffentlich")
+  und `created_by` (FK users, SET NULL). Backfill: Space „Familie" (id 1)
+  erhält alle Altdaten, alle bisherigen Users werden owner.
 
 ## Bild-Upload
 
@@ -181,11 +230,11 @@ Die Anbindung ist **provider-unabhängig**: jeder OpenAI-kompatible Anbieter fun
 
 ## Ersteinrichtung / leere Datenbank
 
-Beim ersten Request legt `src/hooks.server.ts` automatisch die Standard-
-**Kategorien** an (Suppen, Salate, Pasta, …) — idempotent via
-`seedCategoriesIfEmpty()` aus `src/lib/server/seed.ts`, läuft nur wenn die
-Tabelle noch leer ist. Es gibt **keinen** Auth-Seeder und **keine** Demo-Rezepte
-mehr. Rezepte legst du selbst an:
+Beim ersten Request nach dem Login legt `src/lib/server/spaces.ts` automatisch
+einen **persönlichen Space** an — inkl. Standard-**Kategorien** (Suppen, Salate,
+Pasta, …; Liste in `spaces.ts`, früher `seed.ts`). Auf Bestandsdaten legt der
+V10-Backfill den Space „Familie" über alle Altdaten. Es gibt **keinen**
+Auth-Seeder und **keine** Demo-Rezepte. Rezepte legst du selbst an:
 - Kategorien ergänzen/ändern: Drawer → „Einstellungen" (bzw. via `POST /api/categories`)
 - Rezepte: Drawer → „Neues Rezept (KI)" (per Chat) oder manuell
 ```bash
@@ -227,6 +276,8 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 > Hinweis: Alle API-Endpunkte erfordern eine gültige Session (Guard in
 > `hooks.server.ts`). Ohne Login: `401` mit `{ error: 'Nicht angemeldet' }`
 > (JSON, kein Redirect — fetch-Klienten fangen das client-seitig ab).
+> **Alle Daten-Endpunkte sind space-scoped**: Sie liefern/ändern nur Daten
+> des aktiven Spaces des eingeloggten Users; IDs aus fremden Spaces → 404.
 
 ### Kategorien
 - `GET /api/categories` - Alle Kategorien
@@ -239,7 +290,11 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `POST /api/recipes` - Rezept erstellen (Body darf `tags: string[]` enthalten)
 - `GET /api/recipes/[id]` - Rezept-Detail (inkl. `tags`)
 - `PUT /api/recipes/[id]` - Rezept bearbeiten (ersetzt auch die Tags)
-- `DELETE /api/recipes/[id]` - Rezept löschen
+- `DELETE /api/recipes/[id][?scope=all]` - Rezept löschen
+- `POST /api/recipes/[id]/publish` - Veröffentlichen umschalten (nur eigener
+  Space; published wird im „Öffentlich"-Bereich für alle sichtbar)
+- `POST /api/recipes/[id]/copy` - Veröffentlichtes (oder eigenes) Rezept in
+  den aktiven Space kopieren (Deep-Copy + Bild-Duplikat; eigene Kopie → 422)
 - `GET /api/recipes/[id]/versions` - Alle Versionen eines Rezepts
 - `POST /api/recipes/[id]/favorite` - Favorit-Status umschalten
 - `POST /api/recipes/[id]/pin` - Pin-Status umschalten (setzt/leert `pinned_at`)
@@ -255,13 +310,29 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `DELETE /api/tags/[id]` - Tag löschen (Links fallen per CASCADE)
 
 ### Bilder
-- `GET /images/[file]` - Bild ausliefern
+- `GET /images/[file]` - Bild ausliefern (Zugriff: Space-Mitglied ODER
+  Rezept veröffentlicht — siehe `canViewRecipeImage`)
 
 ### KI-Chat (provider-unabhängig)
 - `POST /api/chat` - Streaming-Chat (SSE, `data: {"delta"}`/`data: [DONE]`); Body `{ messages, mode, recipeId? }`
 - `POST /api/chat/finalize` - Liefert validiertes `RecipeInput`-JSON aus dem Chat-Verlauf
 - `GET /api/settings` - KI-Status (Key **maskiert**, nie im Klartext; `has_key`, `ai_model`, `ai_base_url`)
 - `PUT /api/settings` - Konfiguration setzen; Body `{ ai_api_key?, ai_model?, ai_base_url? }`
+
+### Admin (nur `users.is_admin`, Phase 2)
+- `POST /api/admin/users` - Benutzer anlegen (Keycloak-Admin-API + lokale
+  users-Zeile + optional Membership; Body `{ username, email?, name?, password, space_id?, role? }`)
+- `PUT /api/admin/users/[id]` - `{ is_admin? }` schalten (Self-Demote → 422)
+  und/oder `{ active_space_id }` setzen (Membership nötig)
+- `POST /api/admin/spaces` - Space anlegen (`{ name }`)
+- `PUT /api/admin/spaces/[id]` - Space umbenennen (`{ name }`)
+- `DELETE /api/admin/spaces/[id]` - Space **mit Content** löschen (Rezepte,
+  Kategorien, Tags, Utensilien, Settings; Mitglieder fallen per CASCADE)
+- `POST /api/admin/spaces/[id]/members` - Mitglied hinzufügen (`{ user_id, role }`)
+- `PUT /api/admin/spaces/[id]/members/[userId]` - Rolle ändern (`{ role }`)
+- `DELETE /api/admin/spaces/[id]/members/[userId]` - Mitglied entfernen
+  (Konto bleibt; betroffene User fallen automatisch auf ihren nächsten
+  Space zurück bzw. bekommen einen persönlichen provisioniert)
 
 ## Infrastruktur
 

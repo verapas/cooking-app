@@ -1,6 +1,6 @@
 // Siehe https://svelte.dev/docs/kit/types#app.d.ts
 // für Informationen über diese Interfaces
-import type { SessionUser } from '$lib/types';
+import type { ActiveSpace, SessionUser } from '$lib/types';
 
 declare global {
   namespace App {
@@ -9,6 +9,11 @@ declare global {
       /** Angemeldeter Benutzer (OIDC/Keycloak) oder null — gesetzt in
        *  hooks.server.ts aus der DB-Session. */
       user: SessionUser | null;
+      /** Aktiver Space des Benutzers oder null (ohne Login) — Scope für
+       *  alle Daten-Queries. Wird in hooks.server.ts aufgelöst; beim
+       *  Erstlogin provisioniert resolveActiveSpace einen persönlichen
+       *  Space, daher ist space immer gesetzt, wenn user gesetzt ist. */
+      space: ActiveSpace | null;
     }
     // interface PageData {}
     // interface PageState {}

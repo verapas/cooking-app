@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getRecipe, getMainRecipeId } from '$lib/server/queries';
+import { requireSpaceId } from '$lib/server/spaces';
 import { getApiKey } from '$lib/server/settings';
 
 // /chat            → Modus 'new'  (leere Session, neues Rezept)
@@ -10,17 +11,18 @@ import { getApiKey } from '$lib/server/settings';
 // Chat als Kontext dient und „Als neue Version" den richtigen parent
 // bekommt. Beim Modus 'new' liefern wir nur das has_key-Flag, damit die
 // Seite einen Hinweis zeigen kann, falls noch kein Key gesetzt ist.
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
+  const spaceId = requireSpaceId(locals);
   const recipeParam = url.searchParams.get('recipe');
   const improveId = recipeParam ? Number(recipeParam) : null;
 
   // Wird für beide Modi gebraucht (Hinweis, falls Key fehlt).
-  const apiKey = await getApiKey();
+  const apiKey = await getApiKey(spaceId);
 
   if (improveId && Number.isFinite(improveId)) {
-    const recipe = await getRecipe(improveId);
+    const recipe = await getRecipe(spaceId, improveId);
     if (!recipe) throw error(404, 'Rezept nicht gefunden.');
-    const mainRecipeId = await getMainRecipeId(recipe.id);
+    const mainRecipeId = await getMainRecipeId(spaceId, recipe.id);
     if (!mainRecipeId) throw error(500, 'Ungültiger Rezeptstatus.');
     return {
       mode: 'improve' as const,

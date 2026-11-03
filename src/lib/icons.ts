@@ -50,6 +50,7 @@ export const icons = {
   celebrate: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   branch: '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="3"/><line x1="18" y1="3" x2="18" y2="9"/><circle cx="18" cy="12" r="3"/><path d="M6 9a6 6 0 0 1 6 3"/>',
   'chevron-down': '<path d="M6 9l6 6 6-6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13.5 13.5 0 0 1 0 18a13.5 13.5 0 0 1 0-18z"/>',
 
   // Essen / Kategorie-Icons
   soup: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M3 11h18"/><path d="M9 7c0-1 1-1 1-2s-1-1-1-2"/><path d="M13 7c0-1 1-1 1-2s-1-1-1-2"/>',
