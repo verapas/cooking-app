@@ -355,7 +355,7 @@ select.pf-v5-c-form-control {
   color: var(--kc-accent);
 }
 
-/* === Mobile: kompakter, damit alles ohne Scroll in den Viewport passt === */
+/* === Mobile: kompakter, damit alles ohne Scroll in den Viewport passt  === */
 @media (max-width: 480px) {
   .login-pf .card-pf {
     padding: 22px 18px;
