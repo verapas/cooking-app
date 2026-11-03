@@ -17,7 +17,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const improveId = recipeParam ? Number(recipeParam) : null;
 
   // Wird für beide Modi gebraucht (Hinweis, falls Key fehlt).
-  const apiKey = await getApiKey(spaceId);
+  // KI-Settings sind nutzerspezifisch (V12) — nicht Space-scoped.
+  const apiKey = await getApiKey(locals.user!.id);
 
   if (improveId && Number.isFinite(improveId)) {
     const recipe = await getRecipe(spaceId, improveId);

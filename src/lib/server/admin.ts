@@ -142,10 +142,12 @@ export async function userExists(id: number): Promise<boolean> {
 
 /**
  * Löscht einen Space MIT seinem gesamten Content (Rezepte inkl. Schritte/
- * Zutaten/Tags-Links, Kategorien, Tags, Utensilien, KI-Settings). Die
- * Memberships fallen per CASCADE mit weg; users.active_space_id wird per
- * FK auf NULL gesetzt — betroffene Benutzer landen beim nächsten Request
- * automatisch in ihrem nächsten Space (bzw. bekommen einen persönlichen).
+ * Zutaten/Tags-Links, Kategorien, Tags, Utensilien). Die Memberships
+ * fallen per CASCADE mit weg; users.active_space_id wird per FK auf NULL
+ * gesetzt — betroffene Benutzer landen beim nächsten Request automatisch
+ * in ihrem nächsten Space (bzw. bekommen einen persönlichen).
+ * KI-Settings bleiben erhalten: Sie sind seit V12 nutzerspezifisch und
+ * gehören nicht mehr zum Space-Content.
  */
 export async function deleteSpace(id: number): Promise<boolean> {
   const conn = await pool.getConnection();
@@ -158,7 +160,6 @@ export async function deleteSpace(id: number): Promise<boolean> {
     await conn.execute('DELETE FROM categories WHERE space_id = ?', [id]);
     await conn.execute('DELETE FROM tags WHERE space_id = ?', [id]);
     await conn.execute('DELETE FROM kitchen_tools WHERE space_id = ?', [id]);
-    await conn.execute('DELETE FROM settings WHERE space_id = ?', [id]);
     const [result] = await conn.execute<ResultSetHeader>('DELETE FROM spaces WHERE id = ?', [id]);
     await conn.commit();
     return result.affectedRows > 0;

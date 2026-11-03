@@ -1,11 +1,13 @@
-// === App-Settings (server-only, pro Space) ===
+// === App-Settings (server-only, pro Benutzer) ===
 //
 // Dünne Key/Value-Schicht über der `settings`-Tabelle (V2-Migration,
-// seit V10 mit space_id), genutzt von den KI-Funktionen (API-Key,
+// seit V12 mit user_id), genutzt von den KI-Funktionen (API-Key,
 // Modell, Base-URL) und der Settings-API. Alle Funktionen sind async
-// (mysql2-Pool aus db.ts). Jeder Space hat seine eigene KI-Konfiguration
-// — Freunde bringen ihren eigenen Provider-Key mit, statt den des
-// Familien-Spaces zu teilen.
+// (mysql2-Pool aus db.ts). Die KI-Konfiguration ist REIN NUTZERSPEZIFISCH:
+// Jeder Benutzer bringt seinen eigenen Provider-Key mit — unabhängig
+// davon, in welchem Space er gerade aktiv ist (Tags und Küchenutensilien
+// sind dagegen Space-gebunden: gemeinsam im Familien-Space, persönlich
+// im eigenen Space).
 //
 // Bekannte Keys (als Konstanten, damit keine Magic Strings entstehen):
 //   AI_API_KEY  — Provider-API-Key (geheim, nie an den Client)
@@ -26,11 +28,11 @@ export const SETTINGS = {
 export const DEFAULT_MODEL = 'glm-4.6';
 export const DEFAULT_BASE_URL = 'https://api.z.ai/api/paas/v4';
 
-/** Liefert den Wert eines Settings im Space oder null, falls nicht gesetzt. */
-export async function getSetting(spaceId: number, key: string): Promise<string | null> {
+/** Liefert den Wert eines Settings des Benutzers oder null, falls nicht gesetzt. */
+export async function getSetting(userId: number, key: string): Promise<string | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT `value` FROM settings WHERE space_id = ? AND `key` = ?',
-    [spaceId, key]
+    'SELECT `value` FROM settings WHERE user_id = ? AND `key` = ?',
+    [userId, key]
   );
   if (rows.length === 0) return null;
   const row = rows[0] as { value: string };
@@ -39,43 +41,43 @@ export async function getSetting(spaceId: number, key: string): Promise<string |
 
 /** Liefert den Wert eines Settings oder einen Fallback. */
 export async function getSettingOrDefault(
-  spaceId: number,
+  userId: number,
   key: string,
   fallback: string
 ): Promise<string> {
-  const value = await getSetting(spaceId, key);
+  const value = await getSetting(userId, key);
   return value ?? fallback;
 }
 
-/** Setzt (oder überschreibt) ein Setting im Space. Leerstring löscht den Eintrag. */
-export async function setSetting(spaceId: number, key: string, value: string): Promise<void> {
+/** Setzt (oder überschreibt) ein Setting des Benutzers. Leerstring löscht den Eintrag. */
+export async function setSetting(userId: number, key: string, value: string): Promise<void> {
   const trimmed = value.trim();
   if (trimmed === '') {
-    await pool.execute('DELETE FROM settings WHERE space_id = ? AND `key` = ?', [spaceId, key]);
+    await pool.execute('DELETE FROM settings WHERE user_id = ? AND `key` = ?', [userId, key]);
     return;
   }
   await pool.execute<ResultSetHeader>(
-    `INSERT INTO settings (space_id, \`key\`, \`value\`) VALUES (?, ?, ?)
+    `INSERT INTO settings (user_id, \`key\`, \`value\`) VALUES (?, ?, ?)
      ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`,
-    [spaceId, key, trimmed]
+    [userId, key, trimmed]
   );
 }
 
 // --- KI-spezifische Komfort-Helper ---
 
-/** Provider-API-Key (raw) des Spaces oder null, falls keiner konfiguriert ist. */
-export async function getApiKey(spaceId: number): Promise<string | null> {
-  return getSetting(spaceId, SETTINGS.AI_API_KEY);
+/** Provider-API-Key (raw) des Benutzers oder null, falls keiner konfiguriert ist. */
+export async function getApiKey(userId: number): Promise<string | null> {
+  return getSetting(userId, SETTINGS.AI_API_KEY);
 }
 
 /** Konfiguriertes Modell oder der Default (z. B. glm-4.6). */
-export async function getModel(spaceId: number): Promise<string> {
-  return getSettingOrDefault(spaceId, SETTINGS.AI_MODEL, DEFAULT_MODEL);
+export async function getModel(userId: number): Promise<string> {
+  return getSettingOrDefault(userId, SETTINGS.AI_MODEL, DEFAULT_MODEL);
 }
 
 /** Konfigurierte OpenAI-kompatible Base-URL oder der Default (z.ai). */
-export async function getBaseUrl(spaceId: number): Promise<string> {
-  return getSettingOrDefault(spaceId, SETTINGS.AI_BASE_URL, DEFAULT_BASE_URL);
+export async function getBaseUrl(userId: number): Promise<string> {
+  return getSettingOrDefault(userId, SETTINGS.AI_BASE_URL, DEFAULT_BASE_URL);
 }
 
 /** Maskiert einen API-Key für die Anzeige im Client: „••••" + letzte 4 Zeichen. */

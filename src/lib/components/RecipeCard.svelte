@@ -6,11 +6,17 @@
 
   let {
     recipe,
-    onPinChange
+    onPinChange,
+    hrefBase = '/recipe',
+    showActions = true
   }: {
     recipe: RecipeListItem;
     /** Optionale Rückmeldung an die Liste: Karte live umsortieren. */
     onPinChange?: (id: number, pinned: boolean) => void;
+    /** Link-Basis der Karte: /recipe (eigene) oder /public (Öffentlich). */
+    hrefBase?: string;
+    /** false = ohne Pin-/Favoriten-Buttons (öffentlicher Bereich). */
+    showActions?: boolean;
   } = $props();
 
   let totalMin = $derived(
@@ -86,29 +92,31 @@
   }
 </script>
 
-<a class="card recipecard" class:pinned={isPinned} href="/recipe/{recipe.id}">
+<a class="card recipecard" class:pinned={isPinned} href="{hrefBase}/{recipe.id}">
   <div class="thumb">
     {#if recipe.image_url}
       <img src={recipe.image_url} alt="" loading="lazy" />
     {:else}
       <div class="thumb-icon" aria-hidden="true"><Icon name="plate" size={56} /></div>
     {/if}
-    <button
-      class="pin-btn"
-      class:pin-active={isPinned}
-      aria-label={isPinned ? 'Pin lösen' : 'Rezept anpinnen'}
-      onclick={togglePin}
-    >
-      <Icon name="pin" size={18} filled={isPinned} />
-    </button>
-    <button
-      class="fav-btn"
-      class:fav-active={isFavorite}
-      aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
-      onclick={toggleFavorite}
-    >
-      <Icon name="star" size={18} filled={isFavorite} />
-    </button>
+    {#if showActions}
+      <button
+        class="pin-btn"
+        class:pin-active={isPinned}
+        aria-label={isPinned ? 'Pin lösen' : 'Rezept anpinnen'}
+        onclick={togglePin}
+      >
+        <Icon name="pin" size={18} filled={isPinned} />
+      </button>
+      <button
+        class="fav-btn"
+        class:fav-active={isFavorite}
+        aria-label={isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+        onclick={toggleFavorite}
+      >
+        <Icon name="star" size={18} filled={isFavorite} />
+      </button>
+    {/if}
   </div>
   <div class="body">
     {#if recipe.category_name}

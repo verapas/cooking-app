@@ -1,5 +1,5 @@
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { requireSpaceId } from '$lib/server/spaces';
 import {
   getApiKey,
   getBaseUrl,
@@ -9,13 +9,15 @@ import {
   DEFAULT_BASE_URL
 } from '$lib/server/settings';
 
-// Lädt den KI-Konfigurations-Status des aktiven Spaces. Der API-Key
-// wird **maskiert** zurückgegeben, nie im Klartext.
+// Lädt den KI-Konfigurations-Status des BENUTZERS (KI-Settings sind
+// nutzerspezifisch, V12). Der API-Key wird **maskiert** zurückgegeben,
+// nie im Klartext.
 export const load: PageServerLoad = async ({ locals }) => {
-  const spaceId = requireSpaceId(locals);
-  const apiKey = await getApiKey(spaceId);
-  const model = await getModel(spaceId);
-  const baseURL = await getBaseUrl(spaceId);
+  const userId = locals.user?.id;
+  if (!userId) throw error(401, 'Nicht angemeldet');
+  const apiKey = await getApiKey(userId);
+  const model = await getModel(userId);
+  const baseURL = await getBaseUrl(userId);
   return {
     has_key: apiKey !== null && apiKey.trim() !== '',
     key_hint: apiKey ? maskKey(apiKey) : '',

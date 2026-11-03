@@ -140,15 +140,14 @@ export interface RecipeWithDetails extends Recipe {
 /** Veröffentlichtes Rezept im öffentlichen Bereich (Phase 3 „Öffentlich") —
  *  Rezept aus einem beliebigen Space, mit Attribution. */
 export interface PublishedListItem extends RecipeListItem {
-  /** Anzeigename des Urhebers (name || username || email) oder null. */
-  author_name: string | null;
-  space_name: string;
+  /** Urheber-Anzeige: Vorname (persönlicher Space, 1 Mitglied) oder
+   *  Space-Name (geteilter Space, z. B. „Familie") — oder null. */
+  author_label: string | null;
 }
 
 /** Detail eines veröffentlichten Rezepts (öffentliche Detailseite). */
 export interface PublishedRecipe extends RecipeWithDetails {
-  author_name: string | null;
-  space_name: string;
+  author_label: string | null;
 }
 
 export interface IngredientInput {

@@ -2,30 +2,76 @@
   import { untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import Icon from '$lib/components/Icon.svelte';
+  import RecipeCard from '$lib/components/RecipeCard.svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
   // State aus einem Prop initialisieren → untrack() (s. CLAUDE.md).
   let q = $state(untrack(() => data.q));
+  let selectedTagNames = $state<string[]>(untrack(() => [...data.initialTagNames]));
+  let selectedCategory = $state(untrack(() => data.initialCategory));
+  let tagFilterOpen = $state(false);
+  let catFilterOpen = $state(false);
 
-  function fmtTime(m: number | null): string {
-    if (!m || m <= 0) return '';
-    if (m >= 60) {
-      const h = Math.floor(m / 60);
-      const r = m % 60;
-      return r ? `${h}h ${r}m` : `${h}h`;
+  // Popover schließen bei Klick außerhalb (wie Hauptseite, beide Filter)
+  $effect(() => {
+    if (!tagFilterOpen && !catFilterOpen) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.tag-filter') && !target.closest('.cat-filter')) {
+        tagFilterOpen = false;
+        catFilterOpen = false;
+      }
     }
-    return `${m} Min.`;
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  });
+
+  /** Schreibt Suche + Filter in den URL (?) und lädt die Liste neu. */
+  function applyFilters(): void {
+    const params = new URLSearchParams();
+    const query = q.trim();
+    if (query) params.set('q', query);
+    if (selectedTagNames.length > 0) params.set('tags', selectedTagNames.join(','));
+    if (selectedCategory) params.set('category', selectedCategory);
+    const url = params.toString() ? `/public?${params}` : '/public';
+    history.pushState({}, '', url);
+    void invalidateAll();
   }
 
   function search(e: Event) {
     e.preventDefault();
-    const trimmed = q.trim();
-    const url = trimmed ? `/public?q=${encodeURIComponent(trimmed)}` : '/public';
-    history.pushState({}, '', url);
-    invalidateAll();
+    applyFilters();
   }
+
+  function clearSearch(): void {
+    q = '';
+    applyFilters();
+  }
+
+  function toggleTag(name: string): void {
+    selectedTagNames = selectedTagNames.includes(name)
+      ? selectedTagNames.filter((t) => t !== name)
+      : [...selectedTagNames, name];
+    applyFilters();
+  }
+
+  function resetTagFilter(): void {
+    selectedTagNames = [];
+    applyFilters();
+  }
+
+  /** Kategorie ist Einzelauswahl (ein Rezept hat eine Kategorie) —
+      nochmaliges Antippen deaktiviert den Filter. */
+  function toggleCategory(name: string): void {
+    selectedCategory = selectedCategory === name ? '' : name;
+    applyFilters();
+  }
+
+  let filtersActive = $derived(
+    q.trim().length > 0 || selectedTagNames.length > 0 || selectedCategory !== ''
+  );
 </script>
 
 <svelte:head>
@@ -33,53 +79,140 @@
 </svelte:head>
 
 <main class="container list">
-  <header class="head">
-    <h1><Icon name="globe" size={22} /> Öffentlich</h1>
-    <p class="dim">
-      Rezepte, die Mitglieder dieser App veröffentlicht haben — aus allen
-      Spaces. Du kannst sie als Kopie in deinen eigenen Space übernehmen.
-    </p>
-    <form onsubmit={search} class="search">
+  <p class="dim intro">
+    Rezepte, die Mitglieder dieser App veröffentlicht haben — aus allen
+    Spaces. Du kannst sie als Kopie in deinen eigenen Space übernehmen.
+  </p>
+
+  <header class="page-head">
+    <form class="search-inline" onsubmit={search}>
+      <div class="tag-filter">
+        <button
+          type="button"
+          class="btn-icon-search tag-filter-btn"
+          class:filter-active={selectedTagNames.length > 0}
+          onclick={() => {
+            tagFilterOpen = !tagFilterOpen;
+            catFilterOpen = false;
+          }}
+          aria-label="Nach Tags filtern"
+          aria-expanded={tagFilterOpen}
+        >
+          <Icon name="tag" size={20} />
+          {#if selectedTagNames.length > 0}
+            <span class="filter-count">{selectedTagNames.length}</span>
+          {/if}
+        </button>
+        {#if tagFilterOpen}
+          <div class="tag-popover" role="dialog" aria-label="Tag-Filter">
+            {#if data.tags.length === 0}
+              <p class="tag-empty">
+                Noch keine Tags auf veröffentlichten Rezepten.
+              </p>
+            {:else}
+              <div class="tag-options">
+                {#each data.tags as tag (tag.name)}
+                  <button
+                    type="button"
+                    class="tag-option"
+                    class:selected={selectedTagNames.includes(tag.name)}
+                    aria-pressed={selectedTagNames.includes(tag.name)}
+                    onclick={() => toggleTag(tag.name)}
+                  >
+                    {tag.name} <span class="tag-option-count">{tag.count}</span>
+                  </button>
+                {/each}
+              </div>
+              {#if selectedTagNames.length > 0}
+                <button type="button" class="tag-reset" onclick={resetTagFilter}>
+                  Filter zurücksetzen
+                </button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+      </div>
+      <div class="cat-filter">
+        <button
+          type="button"
+          class="btn-icon-search tag-filter-btn"
+          class:filter-active={selectedCategory !== ''}
+          onclick={() => {
+            catFilterOpen = !catFilterOpen;
+            tagFilterOpen = false;
+          }}
+          aria-label="Nach Kategorie filtern"
+          aria-expanded={catFilterOpen}
+        >
+          <Icon name="grid" size={20} />
+        </button>
+        {#if catFilterOpen}
+          <div class="tag-popover" role="dialog" aria-label="Kategorie-Filter">
+            {#if data.categories.length === 0}
+              <p class="tag-empty">
+                Noch keine Kategorien auf veröffentlichten Rezepten.
+              </p>
+            {:else}
+              <div class="tag-options">
+                {#each data.categories as cat (cat.name)}
+                  <button
+                    type="button"
+                    class="tag-option"
+                    class:selected={selectedCategory === cat.name}
+                    aria-pressed={selectedCategory === cat.name}
+                    onclick={() => toggleCategory(cat.name)}
+                  >
+                    {cat.name} <span class="tag-option-count">{cat.count}</span>
+                  </button>
+                {/each}
+              </div>
+              {#if selectedCategory}
+                <button
+                  type="button"
+                  class="tag-reset"
+                  onclick={() => {
+                    selectedCategory = '';
+                    applyFilters();
+                  }}
+                >
+                  Filter zurücksetzen
+                </button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+      </div>
       <input
-        type="search"
         bind:value={q}
-        placeholder="Veröffentlichte Rezepte durchsuchen…"
-        aria-label="Suche"
+        placeholder="Rezept suchen..."
+        autocomplete="off"
       />
-      <button type="submit" class="btn" aria-label="Suchen"><Icon name="search" size={18} /></button>
+      {#if q}
+        <button type="button" class="btn-icon-search" onclick={clearSearch} aria-label="Suche zurücksetzen"><Icon name="close" size={20} /></button>
+      {/if}
+      <button type="submit" class="btn-icon-search" aria-label="Suchen"><Icon name="search" size={20} /></button>
     </form>
   </header>
+
+  {#if filtersActive}
+    <p class="result-info">
+      {data.recipes.length} Treffer{#if q.trim()} für „{q.trim()}"{/if}
+      {#if selectedTagNames.length > 0}&nbsp;· Tags: {selectedTagNames.join(' + ')}{/if}
+      {#if selectedCategory}&nbsp;· Kategorie: {selectedCategory}{/if}
+    </p>
+  {/if}
 
   {#if data.recipes.length === 0}
     <p class="empty">
       <Icon name="info" size={16} />
-      {data.q
+      {filtersActive
         ? 'Keine veröffentlichten Rezepte gefunden.'
         : 'Noch keine veröffentlichten Rezepte. Veröffentliche eines deiner Rezepte über den Globe-Button auf der Detailseite.'}
     </p>
   {:else}
-    <section class="grid">
+    <section class="recipe-grid" aria-label="Veröffentlichte Rezepte">
       {#each data.recipes as r (r.id)}
-        <a class="card" href="/public/{r.id}">
-          {#if r.image_url}
-            <img class="img" src={r.image_url} alt="" loading="lazy" />
-          {:else}
-            <div class="img img-empty"><Icon name="image" size={28} /></div>
-          {/if}
-          <div class="body">
-            <span class="title">{r.title}</span>
-            <span class="by">
-              von {r.author_name ?? 'Unbekannt'}
-              {#if r.space_name}· {r.space_name}{/if}
-            </span>
-            <span class="meta">
-              {#if r.category_name}{r.category_name} · {/if}{r.base_servings} Portionen
-              {#if fmtTime((r.prep_time_min ?? 0) + (r.cook_time_min ?? 0))}
-                · {fmtTime((r.prep_time_min ?? 0) + (r.cook_time_min ?? 0))}
-              {/if}
-            </span>
-          </div>
-        </a>
+        <RecipeCard recipe={r} hrefBase="/public" showActions={false} />
       {/each}
     </section>
   {/if}
@@ -90,37 +223,181 @@
     padding-top: 16px;
     padding-bottom: 40px;
   }
-  .head h1 {
+  .intro {
+    font-size: 0.92rem;
+    margin: 0 0 14px;
+  }
+  .page-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 1.35rem;
-    margin: 14px 0 0;
+    gap: 12px;
+    padding-bottom: 12px;
   }
-  .dim {
-    color: var(--dim);
-    font-size: 0.92rem;
-    margin: 8px 0 14px;
-  }
-  .search {
+  .search-inline {
     display: flex;
-    gap: 8px;
-    margin-bottom: 18px;
+    gap: 6px;
+    width: 100%;
   }
-  .search input {
+  .search-inline input {
     flex: 1;
     min-width: 0;
-    min-height: var(--tap);
-    padding: 10px 14px;
+    padding: 8px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--surface-2);
     color: var(--text);
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
-  .search input:focus {
+  .search-inline input:focus {
     outline: none;
     border-color: var(--accent);
+  }
+  .result-info {
+    color: var(--text-dim);
+    margin: 0 0 14px;
+  }
+  .btn-icon-search {
+    min-width: var(--tap);
+    min-height: var(--tap);
+    width: var(--tap);
+    height: var(--tap);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn-icon-search:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Tag-/Kategorie-Filter: Button links neben der Suche + darunter
+     aufklappendes Popover (1:1 wie die Hauptseite) */
+  .tag-filter,
+  .cat-filter {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .tag-filter-btn {
+    position: relative;
+  }
+
+  .tag-filter-btn.filter-active {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .filter-count {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .tag-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: min(340px, calc(100vw - 32px));
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    padding: 12px;
+    z-index: 30;
+  }
+
+  .tag-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .tag-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+
+  .tag-option:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .tag-option.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .tag-option-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    font-size: 0.74rem;
+    font-weight: 600;
+  }
+
+  .tag-option.selected .tag-option-count {
+    background: rgba(26, 14, 6, 0.25);
+    color: var(--accent-contrast);
+  }
+
+  .tag-reset {
+    margin-top: 10px;
+    width: 100%;
+    min-height: 38px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    cursor: pointer;
+  }
+
+  .tag-reset:hover {
+    color: var(--danger);
+  }
+
+  .tag-empty {
+    margin: 4px 2px;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    line-height: 1.4;
   }
   .empty {
     display: flex;
@@ -129,54 +406,5 @@
     color: var(--dim);
     font-size: 0.92rem;
     line-height: 1.5;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    color: var(--text);
-    text-decoration: none;
-    transition: border-color 0.15s ease;
-  }
-  .card:hover {
-    border-color: var(--accent);
-  }
-  .img {
-    aspect-ratio: 16 / 10;
-    width: 100%;
-    object-fit: cover;
-    display: block;
-    background: var(--surface-2);
-  }
-  .img-empty {
-    display: grid;
-    place-items: center;
-    color: var(--dim);
-  }
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 12px 12px;
-  }
-  .title {
-    font-weight: 600;
-    line-height: 1.3;
-  }
-  .by {
-    color: var(--accent);
-    font-size: 0.8rem;
-  }
-  .meta {
-    color: var(--dim);
-    font-size: 0.78rem;
   }
 </style>

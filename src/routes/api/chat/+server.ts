@@ -35,6 +35,9 @@ interface ChatRequestBody {
 
 export const POST: RequestHandler = async ({ locals, request }) => {
   const spaceId = requireSpaceId(locals);
+  // KI-Settings sind nutzerspezifisch (V12) — nicht wie der Rest Space-scoped.
+  const userId = locals.user?.id;
+  if (!userId) throw error(401, 'Nicht angemeldet');
   let body: ChatRequestBody;
   try {
     body = await request.json();
@@ -92,7 +95,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   }
 
   // --- Key-Check VOR dem Stream: klare JSON-Fehlermeldung ---
-  const apiKey = await getApiKey(spaceId);
+  const apiKey = await getApiKey(userId);
   if (!apiKey || apiKey.trim() === '') {
     return json({ error: 'Kein API-Key konfiguriert.', code: 'no_api_key' }, { status: 400 });
   }
@@ -104,7 +107,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
       const send = (obj: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
-        for await (const delta of streamChat(spaceId, messages, systemPrompt)) {
+        for await (const delta of streamChat(userId, messages, systemPrompt)) {
           send({ delta });
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));

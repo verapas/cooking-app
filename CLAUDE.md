@@ -52,7 +52,7 @@ src/lib/server/        # NUR server-seitig (nie vom Client importieren!)
                        # Content löschen, requireAdmin-Guard
   keycloakAdmin.ts     # Optional: Keycloak Admin REST API (Service-Account
                        # mit manage-users) — Benutzer aus der App anlegen
-  settings.ts          # Key/Value-Settings PRO SPACE (settings-Tabelle)
+  settings.ts          # Key/Value-Settings PRO BENUTZER (V12; KI-Konfig)
                        # + KI-Komfort-Helper
   ai.ts                # KI-Integration (provider-unabhängig): Streaming + Finalize
 src/lib/components/    # UI-Komponenten
@@ -79,7 +79,8 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
                        # löschen (mit Content), Mitgliedschaften + Rollen,
                        # aktiven Space setzen, is_admin schalten
   /public/             # „Öffentlich"-Bereich (Phase 3): veröffentlichte
-                       # Rezepte aller Spaces (Attribution von/Space),
+                       # Rezepte aller Spaces (Attribution: Vorname bei
+                       # persönlichem Space, sonst Space-Name),
                        # /public/[id] = schreibgeschützte Detailansicht mit
                        # „In meinen Space kopieren"
   /recipe/[id]/        # Rezept-Detail (KI-Button → /chat?recipe=<id>;
@@ -170,21 +171,26 @@ vite.config.ts         # Vite + PWA-Konfiguration
   Profildaten aus dem ID-Token — keine Passwörter) und `sessions` (Token-Hash als
   PK, `id_token` für den Logout-Hint, `expires_at` mit Rolling-Refresh;
   FK → users mit CASCADE).
-- **Settings** (V2-Tabelle + V3-Werte, seit V10 pro Space): `settings`
-  (`space_id`, `key`, `value`, `updated_at`) — Key/Value pro Space. Aktuell:
+- **Settings** (V2-Tabelle, V10 pro Space, seit V12 PRO BENUTZER): `settings`
+  (`user_id`, `key`, `value`, `updated_at`) — Key/Value pro Benutzer. Aktuell:
   `AI_API_KEY` (geheim, nie an den Client), `AI_MODEL` (z. B. `glm-5.2`) und
-  `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`). Jeder Space hat seine
-  eigene KI-Konfiguration (Freunde bringen ihren eigenen Key mit). Gelesen/
-  geschrieben via `src/lib/server/settings.ts` (Funktionen nehmen spaceId).
+  `AI_BASE_URL` (z. B. `https://api.z.ai/api/paas/v4`). Die KI-Konfiguration
+  ist rein nutzerspezifisch — jeder Benutzer bringt seinen eigenen Key mit,
+  unabhängig vom aktiven Space (Tags/Utensilien sind dagegen Space-gebunden).
+  Gelesen/geschrieben via `src/lib/server/settings.ts` (Funktionen nehmen
+  userId). V12-Backfill: Jedes Mitglied eines Spaces hat die bisherigen
+  Space-Werte als eigene Kopie erhalten.
 - **Spaces** (V10): `spaces` (id, name) + `space_members` (space_id, user_id,
   role ENUM owner|member, PK (space_id,user_id), CASCADE auf beide Seiten).
   `users.active_space_id` (FK, SET NULL) sagt, welcher Space aktiv ist;
   `users.is_admin` (App-Admin für Phase 2 Benutzerverwaltung; V10-Backfill
-  setzt den frühesten User auf Admin). `categories`, `tags`, `kitchen_tools`,
-  `recipes` und `settings` haben je eine `space_id` NOT NULL (FK → spaces,
+  setzt den frühesten User auf Admin). `categories`, `tags`, `kitchen_tools`
+  und `recipes` haben je eine `space_id` NOT NULL (FK → spaces,
   RESTRICT — Space-Löschen erfordert vorheriges Aufräumen des Contents).
   UNIQUE-Keys sind space-lokal: `(space_id, slug)` bei Kategorien,
-  `(space_id, name)` bei Tags/Utensilien, PK `(space_id, key)` bei Settings.
+  `(space_id, name)` bei Tags/Utensilien. KI-Settings sind seit V12
+  nutzerspezifisch (`settings.user_id`, PK `(user_id, key)`) — nicht Teil
+  des Space-Contents.
   `recipes` zusätzlich: `is_published`/`published_at` (Phase 3 „Öffentlich")
   und `created_by` (FK users, SET NULL). Backfill: Space „Familie" (id 1)
   erhält alle Altdaten, alle bisherigen Users werden owner.
@@ -327,7 +333,8 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `POST /api/admin/spaces` - Space anlegen (`{ name }`)
 - `PUT /api/admin/spaces/[id]` - Space umbenennen (`{ name }`)
 - `DELETE /api/admin/spaces/[id]` - Space **mit Content** löschen (Rezepte,
-  Kategorien, Tags, Utensilien, Settings; Mitglieder fallen per CASCADE)
+  Kategorien, Tags, Utensilien; Mitglieder fallen per CASCADE — KI-Settings
+  bleiben, da nutzerspezifisch)
 - `POST /api/admin/spaces/[id]/members` - Mitglied hinzufügen (`{ user_id, role }`)
 - `PUT /api/admin/spaces/[id]/members/[userId]` - Rolle ändern (`{ role }`)
 - `DELETE /api/admin/spaces/[id]/members/[userId]` - Mitglied entfernen

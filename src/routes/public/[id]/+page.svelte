@@ -97,8 +97,7 @@
     <div class="card-body">
       <p class="by">
         <Icon name="globe" size={14} />
-        Veröffentlicht von {recipe.author_name ?? 'Unbekannt'}
-        {#if recipe.space_name}· Space „{recipe.space_name}“{/if}
+        Veröffentlicht von {recipe.author_label ?? 'Unbekannt'}
       </p>
       <h1>{recipe.title}</h1>
       {#if recipe.description}<p class="desc">{recipe.description}</p>{/if}

@@ -1,0 +1,393 @@
+/* ============================================================
+   Koch-App Login-Theme — CSS-Overlay für Keycloak 26.x
+   (Parent: keycloak.v2 / PatternFly 5)
+
+   Palette & Radien 1:1 aus src/app.css der Koch-App.
+   Alle Regeln sind absichtlich „deterministisch dunkel":
+   Keycloak setzt bei OS-Dark-Mode die Klasse `pf-v5-theme-dark`
+   auf <html> — wir definieren dieselben Werte für BEIDE
+   Zustände, damit die Login-Seite immer dunkel aussieht.
+   ============================================================ */
+
+:root,
+:root.pf-v5-theme-dark {
+  color-scheme: dark;
+
+  /* --- Koch-App-Palette (aus src/app.css) --- */
+  --kc-bg: #15110d;
+  --kc-surface: #1f1a14;
+  --kc-surface-2: #2a2319;
+  --kc-surface-3: #362d20;
+  --kc-border: #3a3024;
+
+  --kc-text: #f5ede2;
+  --kc-text-dim: #b3a695;
+  --kc-text-faint: #7d7263;
+
+  --kc-accent: #ff7a3d;
+  --kc-accent-hover: #ff8f57;
+  --kc-accent-press: #e8652a;
+  --kc-accent-contrast: #1a0e06;
+
+  --kc-success: #57d977;
+  --kc-danger: #ff5c5c;
+  --kc-warning: #ffbf47;
+  --kc-info: #6ab7ff;
+
+  --kc-radius-sm: 8px;
+  --kc-radius: 14px;
+
+  --kc-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+
+  /* --- PatternFly-5-Globals auf unsere Palette drehen --- */
+  --pf-v5-global--FontFamily--sans-serif: var(--kc-font);
+
+  --pf-v5-global--primary-color--100: var(--kc-accent);
+  --pf-v5-global--primary-color--200: var(--kc-accent-hover);
+  --pf-v5-global--primary-color--300: var(--kc-accent-hover);
+  --pf-v5-global--active-color--100: var(--kc-accent);
+
+  --pf-v5-global--link--Color: var(--kc-accent);
+  --pf-v5-global--link--Color--hover: var(--kc-accent-hover);
+  --pf-v5-global--link--Color--visited: var(--kc-accent);
+
+  --pf-v5-global--BackgroundColor--100: var(--kc-bg);
+  --pf-v5-global--BackgroundColor--200: var(--kc-surface);
+  --pf-v5-global--BackgroundColor--300: var(--kc-surface-2);
+
+  --pf-v5-global--Color--100: var(--kc-text);
+  --pf-v5-global--Color--200: var(--kc-text-dim);
+  --pf-v5-global--Color--300: var(--kc-text-faint);
+
+  --pf-v5-global--BorderColor--100: var(--kc-border);
+  --pf-v5-global--BorderColor--200: var(--kc-border);
+  --pf-v5-global--BorderColor--300: var(--kc-text-faint);
+
+  --pf-v5-global--danger-color--100: var(--kc-danger);
+  --pf-v5-global--success-color--100: var(--kc-success);
+  --pf-v5-global--warning-color--100: var(--kc-warning);
+
+  /* --- Theme-Hooks aus keycloak.v2 (styles.css des Parents) --- */
+  --keycloak-card-top-color: var(--kc-accent); /* Akzent-Balken oben auf der Karte */
+  --keycloak-bg-logo-url: none;               /* Default-Hintergrunds-SVG aus */
+  --keycloak-logo-url: url('../img/logo.svg'); /* unser Topf-Logo */
+  /* Default ist 300×63 (Keycloak-Wordmark) — unser Topf ist quadratisch */
+  --keycloak-logo-width: 64px;
+  --keycloak-logo-height: 64px;
+}
+
+/* === Seite === */
+
+.login-pf,
+.login-pf body {
+  font-family: var(--kc-font);
+  color: var(--kc-text);
+}
+
+.login-pf body {
+  background:
+    radial-gradient(1100px 700px at 85% -10%, rgba(255, 122, 61, 0.16), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(255, 122, 61, 0.07), transparent 55%),
+    var(--kc-bg);
+  /* 100dvh statt nur 100vh: auf Mobile umfasst 100vh die Browser-Leiste
+     (URL-Bar) → Seite war immer minimal zu hoch → Scrollbar ohne Grund.
+     dvh passt sich der sichtbaren Höhe an (Fallback: vh für Alte). */
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Äußere Wrapper neutral halten — die Karte trägt die Fläche */
+.pf-v5-c-login__main {
+  background: transparent;
+}
+
+/* Logo über der Karte: keycloak.v2 rendert selbst schon div.kc-logo-text
+   (nimmt --keycloak-logo-url, Größe über --keycloak-logo-width/Height).
+   NICHT zusätzlich per ::before injizieren — sonst gibt es zwei Logos.
+   Hier nur den Abstand zur Karte etwas großzügiger machen: */
+div.kc-logo-text {
+  margin: 0 auto 18px;
+}
+
+/* === Login-Karte === */
+
+.login-pf .card-pf {
+  background: var(--kc-surface);
+  border: 1px solid var(--kc-border);
+  border-radius: var(--kc-radius);
+  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.65);
+}
+
+#kc-page-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--kc-text);
+}
+
+/* === Formular === */
+
+.pf-v5-c-form__label-text,
+.pf-v5-c-form__group .pf-v5-c-form__label {
+  color: var(--kc-text-dim);
+}
+
+/* Eingabefelder komplett durchstylen — mit .login-pf-Präfix (höhere
+   Spezifität als PatternFly), damit KEIN Original-Stil durchschlägt.
+   PatternFly zeichnet u. a. eine blaue Focus-Linie (border-bottom /
+   box-shadow) — deshalb: border als Shorthand in JEDEM Zustand setzen
+   und box-shadow im Grundzustand explizit auf none. */
+.login-pf .pf-v5-c-form-control {
+  background-color: var(--kc-surface-2);
+  border: 1px solid var(--kc-border);
+  border-radius: var(--kc-radius-sm);
+  color: var(--kc-text);
+  box-shadow: none;
+  outline: none;
+}
+
+.login-pf .pf-v5-c-form-control::placeholder {
+  color: var(--kc-text-faint);
+}
+
+.login-pf .pf-v5-c-form-control:hover {
+  border: 1px solid var(--kc-text-faint);
+  box-shadow: none;
+}
+
+/* Focus = oranger Ring (ersetzt die blaue Keycloak-Linie; der Ring
+   gilt auch für Touch/Fokus ohne :focus-visible) */
+.login-pf .pf-v5-c-form-control:focus,
+.login-pf .pf-v5-c-form-control:focus-visible,
+.login-pf .pf-v5-c-form-control.pf-m-focus {
+  border: 1px solid var(--kc-accent);
+  box-shadow: 0 0 0 2px rgba(255, 122, 61, 0.3);
+  outline: none;
+}
+
+.login-pf .pf-v5-c-form-control.pf-m-error {
+  border: 1px solid var(--kc-danger);
+}
+
+/* Passwort-Feld: PatternFly setzt das Auge-Button direkt an das
+   Eingabefeld (Kante an Kante) — mit unseren runden Ecken wirkt das
+   wie überlappend. Deshalb: Lücke in die Input-Group und der Button
+   bekommt eigene runde Ecken. */
+.pf-v5-c-input-group {
+  gap: 8px;
+}
+
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+  border-radius: var(--kc-radius-sm);
+}
+
+/* Autofill gelb auf dunkel abschalten */
+.pf-v5-c-form-control:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--kc-surface-2) inset;
+  -webkit-text-fill-color: var(--kc-text);
+  caret-color: var(--kc-text);
+  transition: background-color 8888s ease-out;
+}
+
+/* Checkboxen („Angemeldet bleiben") */
+.pf-v5-c-check__input {
+  accent-color: var(--kc-accent);
+}
+.pf-v5-c-check__label {
+  color: var(--kc-text-dim);
+}
+
+/* Locale-Dropdown oben rechts */
+select.pf-v5-c-form-control {
+  appearance: none;
+  background-color: var(--kc-surface-2);
+  color: var(--kc-text);
+}
+
+/* Fehlermeldungen unter Feldern */
+.pf-v5-c-helper-text__item-text.pf-m-error {
+  color: var(--kc-danger);
+}
+
+/* === Buttons === */
+
+.pf-v5-c-button {
+  border-radius: var(--kc-radius-sm);
+  font-weight: 600;
+}
+
+/* Primär („Anmelden") — wie .btn-primary der App */
+.pf-v5-c-button.pf-m-primary {
+  background-color: var(--kc-accent);
+  color: var(--kc-accent-contrast);
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background-color: var(--kc-accent-hover);
+  color: var(--kc-accent-contrast);
+}
+
+.pf-v5-c-button.pf-m-primary:active {
+  background-color: var(--kc-accent-press);
+}
+
+/* Sekundär (Social-Logins, „Abbrechen", …) */
+.pf-v5-c-button.pf-m-secondary {
+  background-color: var(--kc-surface-2);
+  border-color: var(--kc-border);
+  color: var(--kc-text);
+}
+
+.pf-v5-c-button.pf-m-secondary:hover,
+.pf-v5-c-button.pf-m-secondary:focus {
+  background-color: var(--kc-surface-3);
+  border-color: var(--kc-text-faint);
+  color: var(--kc-text);
+}
+
+/* Link-Buttons („Passwort vergessen?", „Registrieren") */
+.pf-v5-c-button.pf-m-link,
+.pf-v5-c-login__main-footer-band-item .pf-v5-c-button {
+  color: var(--kc-accent);
+}
+
+.pf-v5-c-button.pf-m-link:hover,
+.pf-v5-c-button.pf-m-link:focus {
+  color: var(--kc-accent-hover);
+}
+
+/* Control-Button im Input (Passwort-Anzeige/Auge) */
+.pf-v5-c-button.pf-m-control {
+  background-color: var(--kc-surface-3);
+  border: 1px solid var(--kc-border);
+  color: var(--kc-text-dim);
+}
+
+.pf-v5-c-button.pf-m-control:hover,
+.pf-v5-c-button.pf-m-control:focus {
+  border-color: var(--kc-accent);
+  color: var(--kc-accent);
+}
+
+/* Abstand zwischen Buttons, die untereinander gestapelt sind
+   (z. B. „Anmelden" + „Mit Passkey anmelden"). Der Passkey-Block sitzt
+   als eigenes Form/Div direkt NACH dem Login-Form — ohne diese Regel
+   klebten beide auf Mobile aneinander (Desktop-Grid gab ihnen Abstand). */
+#kc-content-wrapper > form + form,
+#kc-content-wrapper > form + div {
+  margin-top: 12px;
+}
+
+.pf-v5-c-button.pf-m-block + .pf-v5-c-button.pf-m-block {
+  margin-top: 10px;
+}
+
+/* === Alerts (z. B. „Ungültiger Benutzername") === */
+
+.pf-v5-c-alert.pf-m-inline {
+  border-radius: var(--kc-radius-sm);
+  background-color: var(--kc-surface-2);
+}
+
+.pf-v5-c-alert.pf-m-inline .pf-v5-c-alert__title {
+  color: var(--kc-text);
+}
+
+.pf-v5-c-alert .pf-v5-c-alert__description {
+  color: var(--kc-text-dim);
+}
+
+/* Status-Varianten mit passenden Tints auf dunklem Grund */
+.pf-v5-c-alert.pf-m-danger {
+  background-color: rgba(255, 92, 92, 0.12);
+  border: 1px solid rgba(255, 92, 92, 0.45);
+}
+
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__icon {
+  color: var(--kc-danger);
+}
+
+.pf-v5-c-alert.pf-m-success {
+  background-color: rgba(87, 217, 119, 0.1);
+  border: 1px solid rgba(87, 217, 119, 0.4);
+}
+
+.pf-v5-c-alert.pf-m-success .pf-v5-c-alert__icon {
+  color: var(--kc-success);
+}
+
+.pf-v5-c-alert.pf-m-warning {
+  background-color: rgba(255, 191, 71, 0.1);
+  border: 1px solid rgba(255, 191, 71, 0.4);
+}
+
+.pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__icon {
+  color: var(--kc-warning);
+}
+
+.pf-v5-c-alert.pf-m-info {
+  background-color: rgba(106, 183, 255, 0.1);
+  border: 1px solid rgba(106, 183, 255, 0.4);
+}
+
+.pf-v5-c-alert.pf-m-info .pf-v5-c-alert__icon {
+  color: var(--kc-info);
+}
+
+/* === Footer & Links === */
+
+.pf-v5-c-login__main-footer,
+#kc-info,
+#kc-info-wrapper {
+  color: var(--kc-text-dim);
+}
+
+#kc-info a,
+.pf-v5-c-login__main-footer a,
+#kc-content a {
+  color: var(--kc-text-dim);
+}
+
+#kc-info a:hover,
+.pf-v5-c-login__main-footer a:hover,
+#kc-content a:hover {
+  color: var(--kc-accent);
+}
+
+/* === Mobile: kompakter, damit alles ohne Scroll in den Viewport passt === */
+@media (max-width: 480px) {
+  .login-pf .card-pf {
+    padding: 22px 18px;
+  }
+
+  #kc-page-title {
+    font-size: 1.25rem;
+  }
+
+  div.kc-logo-text {
+    margin-bottom: 14px;
+  }
+}
+
+/* === Feinschliff (wie die App) === */
+
+:focus-visible {
+  outline: 2px solid var(--kc-accent);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--kc-border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--kc-surface-3);
+  border-radius: 8px;
+}

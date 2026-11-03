@@ -24,8 +24,9 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
 };
 
 // DELETE /api/admin/spaces/[id] — Space MIT Content löschen (nur App-Admins).
-// Löscht alle Rezepte (inkl. Schritte/Zutaten), Kategorien, Tags, Utensilien
-// und KI-Settings des Spaces; Mitglieder fallen per CASCADE heraus.
+// Löscht alle Rezepte (inkl. Schritte/Zutaten), Kategorien, Tags und Utensilien
+// des Spaces; Mitglieder fallen per CASCADE heraus. KI-Settings bleiben
+// erhalten (seit V12 nutzerspezifisch, gehören nicht zum Space).
 export const DELETE: RequestHandler = async ({ locals, params }) => {
   requireAdmin(locals);
   const id = Number(params.id);

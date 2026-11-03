@@ -35,6 +35,9 @@ interface FinalizeRequestBody {
 
 export const POST: RequestHandler = async ({ locals, request }) => {
   const spaceId = requireSpaceId(locals);
+  // KI-Settings sind nutzerspezifisch (V12) — nicht wie der Rest Space-scoped.
+  const userId = locals.user?.id;
+  if (!userId) throw error(401, 'Nicht angemeldet');
   let body: FinalizeRequestBody;
   try {
     body = await request.json();
@@ -90,13 +93,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     if (!contextRecipe) throw error(404, 'Rezept nicht gefunden.');
   }
 
-  const apiKey = await getApiKey(spaceId);
+  const apiKey = await getApiKey(userId);
   if (!apiKey || apiKey.trim() === '') {
     return json({ error: 'Kein API-Key konfiguriert.', code: 'no_api_key' }, { status: 400 });
   }
 
   try {
-    const recipe = await finalizeRecipe(spaceId, messages, categories, tools, tagNames, contextRecipe);
+    const recipe = await finalizeRecipe(userId, messages, categories, tools, tagNames, contextRecipe);
     return json({ recipe });
   } catch (err) {
     if (err instanceof NoApiKeyError) {

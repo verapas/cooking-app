@@ -757,33 +757,65 @@ export async function canViewRecipeImage(
 
 // ---------- Öffentlicher Bereich (Phase 3 „Öffentlich") ----------
 // Veröffentlichte Rezepte sind für ALLE eingeloggten Benutzer sichtbar
-// (über Spaces hinweg), mit Attribution von Urheber und Space. Das
-// Publish-Flag selbst wird space-scoped gesetzt (nur eigene Rezepte).
+// (über Spaces hinweg). Attribution: Rezept aus einem persönlichen Space
+// (1 Mitglied) → Vorname des Urhebers; aus einem geteilten Space
+// (z. B. „Familie") → Space-Name. Das Publish-Flag selbst wird
+// space-scoped gesetzt (nur eigene Rezepte).
 
-/** Anzeigename eines Urhebers: name || username || email. */
+/** Anzeigename eines Urhebers als VORNAME: erstes Wort von
+ *  name || username || email (bei E-Mail-Adressen der Teil vor dem @). */
 function authorDisplayName(row: {
   name: string | null;
   username: string | null;
   email: string | null;
 }): string | null {
-  return row.name ?? row.username ?? row.email ?? null;
+  const full = (row.name ?? row.username ?? row.email)?.trim();
+  if (!full) return null;
+  const first = full.split(/\s+/)[0];
+  return first.includes('@') ? first.split('@')[0] : first;
 }
 
 /** SQL-Schnipsel + Mapper für veröffentlichte Rezepte mit Attribution. */
 const PUBLISHED_SELECT = `
   SELECT r.*, c.id AS c_id, c.name AS category_name, c.slug AS category_slug,
          c.icon AS c_icon, u.name AS u_name, u.username AS u_username,
-         u.email AS u_email, s.name AS space_name
+         u.email AS u_email, s.name AS space_name, smc.member_count,
+         su.name AS su_name, su.username AS su_username, su.email AS su_email
   FROM recipes r
   LEFT JOIN categories c ON c.id = r.category_id
   LEFT JOIN users u ON u.id = r.created_by
-  JOIN spaces s ON s.id = r.space_id`;
+  JOIN spaces s ON s.id = r.space_id
+  LEFT JOIN (
+    SELECT sm.space_id, COUNT(*) AS member_count, MIN(sm.user_id) AS first_user_id
+    FROM space_members sm
+    GROUP BY sm.space_id
+  ) smc ON smc.space_id = r.space_id
+  LEFT JOIN users su ON su.id = smc.first_user_id`;
 
 interface PublishedRow extends Record<string, unknown> {
   u_name: string | null;
   u_username: string | null;
   u_email: string | null;
-  space_name: string;
+  space_name: string | null;
+  member_count: number;
+  su_name: string | null;
+  su_username: string | null;
+  su_email: string | null;
+}
+
+/**
+ * Anzeige der Urheberschaft: geteilter Space (mehrere Mitglieder, z. B.
+ * „Familie") → Space-Name; persönlicher Space (ein Mitglied) → Vorname
+ * des Urhebers — und falls created_by fehlt (Alt-Rezepte), Vorname des
+ * einzigen Mitglieds (das muss der Urheber sein).
+ */
+function attributionLabel(row: PublishedRow): string | null {
+  if (Number(row.member_count ?? 0) > 1) return row.space_name ?? null;
+  return authorDisplayName({
+    name: row.u_name ?? row.su_name,
+    username: row.u_username ?? row.su_username,
+    email: row.u_email ?? row.su_email
+  });
 }
 
 function mapPublishedRow(row: PublishedRow): PublishedListItem {
@@ -793,22 +825,41 @@ function mapPublishedRow(row: PublishedRow): PublishedListItem {
     is_favorite: Boolean(normalized.is_favorite),
     is_pinned: Boolean(normalized.is_pinned),
     is_published: Boolean(normalized.is_published),
-    author_name: authorDisplayName({
-      name: row.u_name,
-      username: row.u_username,
-      email: row.u_email
-    }),
+    author_label: attributionLabel(row),
     tags: [] as string[]
   } as unknown as PublishedListItem;
 }
 
-/** Alle veröffentlichten Rezepte (aller Spaces), neueste zuerst. */
-export async function listPublishedRecipes(q?: string): Promise<PublishedListItem[]> {
+/**
+ * Alle veröffentlichten Rezepte (aller Spaces), neueste zuerst.
+ * Filter (kombinierbar): q = Titel/Beschreibung, tagNames = UND-Verknüpft
+ * direkt am Rezept (die öffentliche Liste ist flach — kein Familien-
+ * Konzept wie bei listRecipes), categoryName = exakter Kategoriename.
+ * Tags/Kategorien werden absichtlich über den NAMEN gefiltert (nicht die
+ * id): beide sind space-scoped, gleiche Begriffe aus verschiedenen
+ * Spaces sollen gemeinsam treffen.
+ */
+export async function listPublishedRecipes(opts: {
+  q?: string;
+  tagNames?: string[];
+  categoryName?: string;
+} = {}): Promise<PublishedListItem[]> {
   const params: unknown[] = [];
   let where = 'WHERE r.is_published = 1';
-  if (q) {
+  if (opts.q) {
     where += ' AND (r.title LIKE ? OR r.description LIKE ?)';
-    params.push(`%${q}%`, `%${q}%`);
+    params.push(`%${opts.q}%`, `%${opts.q}%`);
+  }
+  for (const tagName of opts.tagNames ?? []) {
+    where += ` AND EXISTS (
+      SELECT 1 FROM recipe_tags rt JOIN tags t ON t.id = rt.tag_id
+      WHERE rt.recipe_id = r.id AND t.name = ?
+    )`;
+    params.push(tagName);
+  }
+  if (opts.categoryName) {
+    where += ' AND c.name = ?';
+    params.push(opts.categoryName);
   }
   const [rows] = await pool.query<RowDataPacket[]>(
     `${PUBLISHED_SELECT}
@@ -818,6 +869,43 @@ export async function listPublishedRecipes(q?: string): Promise<PublishedListIte
     params
   );
   return rows.map((r) => mapPublishedRow(r as unknown as PublishedRow));
+}
+
+/** Option für einen Filter im öffentlichen Bereich (Name + Trefferzahl). */
+export interface PublishedFilterOption {
+  name: string;
+  count: number;
+}
+
+/** Tag-Namen veröffentlichter Rezepte mit Zählern — Optionen für den
+ *  Tag-Filter im öffentlichen Bereich. Gruppiert nach NAME, da Tags
+ *  space-scoped sind und gleiche Begriffe aus verschiedenen Spaces
+ *  zusammengehören. */
+export async function listPublishedTags(): Promise<PublishedFilterOption[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT t.name, COUNT(*) AS count
+     FROM recipes r
+     JOIN recipe_tags rt ON rt.recipe_id = r.id
+     JOIN tags t ON t.id = rt.tag_id
+     WHERE r.is_published = 1
+     GROUP BY t.name
+     ORDER BY t.name ASC`
+  );
+  return rows.map((r) => ({ name: r.name as string, count: Number(r.count) }));
+}
+
+/** Kategorienamen veröffentlichter Rezepte mit Zählern — Optionen für
+ *  den Kategorie-Filter im öffentlichen Bereich (nach NAME gruppiert). */
+export async function listPublishedCategories(): Promise<PublishedFilterOption[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT c.name, COUNT(*) AS count
+     FROM recipes r
+     JOIN categories c ON c.id = r.category_id
+     WHERE r.is_published = 1
+     GROUP BY c.name
+     ORDER BY c.name ASC`
+  );
+  return rows.map((r) => ({ name: r.name as string, count: Number(r.count) }));
 }
 
 /**
@@ -848,14 +936,23 @@ export async function getPublishedRecipe(id: number): Promise<PublishedRecipe | 
   );
   const tagNames = await getRecipeTags(id);
 
-  const { u_name, u_username, u_email, ...rest } = row;
+  const {
+    u_name, u_username, u_email,
+    su_name, su_username, su_email,
+    space_name, member_count,
+    ...rest
+  } = row;
   const normalized = normalizeDates(rest, RECIPE_DATES);
   return {
     ...(normalized as object),
     is_favorite: Boolean(normalized.is_favorite),
     is_pinned: Boolean(normalized.is_pinned),
     is_published: true,
-    author_name: authorDisplayName({ name: u_name, username: u_username, email: u_email }),
+    author_label: attributionLabel({
+      u_name, u_username, u_email,
+      su_name, su_username, su_email,
+      space_name, member_count
+    }),
     tags: tagNames,
     category:
       row.c_id != null

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Koch-App Logo: Kochtopf im App-Akzent (#ff7a3d) -->
+  <!-- Deckelknauf -->
+  <circle cx="32" cy="16" r="4" fill="#ff7a3d"/>
+  <!-- Deckel -->
+  <path d="M14 24h36" stroke="#ff7a3d" stroke-width="4" stroke-linecap="round"/>
+  <!-- Topfkörper -->
+  <path d="M12 30h40v12a12 12 0 0 1-12 12H24a12 12 0 0 1-12-12V30Z"
+        fill="#2a2319" stroke="#ff7a3d" stroke-width="4"/>
+  <!-- Griffe -->
+  <path d="M4 32h8M52 32h8" stroke="#ff7a3d" stroke-width="4" stroke-linecap="round"/>
+</svg>

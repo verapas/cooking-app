@@ -12,6 +12,7 @@
   let current = $derived.by(() => {
     const path = page.url.pathname;
     if (path === '/favorites') return { label: 'Favoriten', icon: 'star' };
+    if (path.startsWith('/public')) return { label: 'Öffentlich', icon: 'globe' };
     if (path === '/chat') return { label: 'Neues Rezept (KI)', icon: 'sparkles' };
     if (path === '/settings/ai') return { label: 'KI-Einstellungen', icon: 'sparkles' };
     if (path === '/settings/tools') return { label: 'Küchenutensilien', icon: 'pot' };
