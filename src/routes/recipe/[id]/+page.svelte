@@ -18,13 +18,15 @@
   let uploadBusy = $state(false);
   let uploadError = $state('');
   let versionDropdownOpen = $state(false);
+  let actionDropdownOpen = $state(false);
 
-  // Dropdown schließen bei Klick außerhalb
+  // Dropdowns schließen bei Klick außerhalb (beide)
   $effect(() => {
-    if (!versionDropdownOpen) return;
+    if (!versionDropdownOpen && !actionDropdownOpen) return;
     function handler(e: MouseEvent) {
       const target = e.target as HTMLElement;
       if (!target.closest('.version-dropdown')) versionDropdownOpen = false;
+      if (!target.closest('.action-dropdown')) actionDropdownOpen = false;
     }
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
@@ -323,6 +325,7 @@
                   class="version-option"
                   class:active={version.id === selectedVersionId}
                   role="option"
+                  aria-selected={version.id === selectedVersionId}
                   onclick={() => { changeVersion(version.id); versionDropdownOpen = false; }}
                 >
                   {version.version_name || (version.is_main ? 'Standard' : `Variante #${version.id}`)}
@@ -334,43 +337,65 @@
         </div>
       {/if}
 
-      <div class="action-group">
+      <!-- Alle Aktionen in EINEM Dropdown (Zahnrad) — Bearbeiten, KI,
+           Veröffentlichen, Löschen; Icons + Labels wie im Versionen-Menü. -->
+      <div class="action-dropdown">
         <button
           type="button"
           class="action-btn"
-          class:action-published={isPublished}
-          onclick={togglePublish}
-          disabled={publishBusy}
-          aria-label={isPublished ? 'Veröffentlichung zurückziehen' : 'Im „Öffentlich“-Bereich veröffentlichen'}
-          title={isPublished ? 'Veröffentlichung zurückziehen' : 'Veröffentlichen („Öffentlich“)'}
+          onclick={() => (actionDropdownOpen = !actionDropdownOpen)}
+          aria-label="Aktionen"
+          aria-haspopup="menu"
+          aria-expanded={actionDropdownOpen}
+          title="Aktionen"
         >
-          <Icon name="globe" size={18} />
+          <Icon name="cog" size={18} />
         </button>
-        <a
-          href="/recipe/{recipe.id}/edit"
-          class="action-btn"
-          aria-label="Bearbeiten"
-          title="Bearbeiten"
-        >
-          <Icon name="edit" size={18} />
-        </a>
-        <a
-          href="/chat?recipe={recipe.id}"
-          class="action-btn action-ai"
-          aria-label="Mit KI verbessern oder neue Version"
-          title="Mit KI verbessern / neue Version"
-        >
-          <Icon name="sparkles" size={18} />
-        </a>
-        <button
-          type="button"
-          class="action-btn action-danger"
-          onclick={deleteRecipe}
-          aria-label="Rezept löschen"
-          title="Löschen"
-        >
-          <Icon name="trash" size={18} />
-        </button>
+        {#if actionDropdownOpen}
+          <div class="action-menu" role="menu">
+            <a
+              class="action-item"
+              role="menuitem"
+              href="/recipe/{recipe.id}/edit"
+              onclick={() => (actionDropdownOpen = false)}
+            >
+              <Icon name="edit" size={16} /> Bearbeiten
+            </a>
+            <a
+              class="action-item ai"
+              role="menuitem"
+              href="/chat?recipe={recipe.id}"
+              onclick={() => (actionDropdownOpen = false)}
+            >
+              <Icon name="sparkles" size={16} /> KI-Assistent
+            </a>
+            <button
+              type="button"
+              class="action-item"
+              class:published={isPublished}
+              role="menuitem"
+              onclick={() => {
+                actionDropdownOpen = false;
+                void togglePublish();
+              }}
+              disabled={publishBusy}
+            >
+              <Icon name="globe" size={16} />
+              {isPublished ? 'Veröffentlichung zurückziehen' : 'Veröffentlichen'}
+            </button>
+            <button
+              type="button"
+              class="action-item danger"
+              role="menuitem"
+              onclick={() => {
+                actionDropdownOpen = false;
+                void deleteRecipe();
+              }}
+            >
+              <Icon name="trash" size={16} /> Löschen
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   </article>
@@ -416,7 +441,9 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    overflow: hidden;
+    /* Bewusst KEIN overflow:hidden — die Dropdowns im Karten-Footer
+       klappen über den unteren Kartenrand. Das Hero-Bild rundet deshalb
+       seine eigenen oberen Ecken ab (siehe .hero). */
   }
 
   .card-body {
@@ -426,6 +453,8 @@
   .hero {
     aspect-ratio: 16 / 10;
     background: var(--surface-2);
+    border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+    overflow: hidden;
   }
   .hero img {
     width: 100%;
@@ -538,12 +567,13 @@
   .version-trigger :global(svg) {
     transition: transform 0.2s ease;
   }
-  /* Das Dropdown sitzt im Karten-Footer → klappt nach OBEN auf
-     (die Karte hat overflow:hidden, nach unten würde es abgeschnitten). */
+  /* Dropdowns klappen nach UNTEN auf (klassisch) — die Karte clippt
+     nicht mehr (kein overflow:hidden), der Menü-Inhalt liegt über dem
+     nachfolgenden Seiteninhalt (z-index). */
   .version-menu {
     position: absolute;
-    bottom: calc(100% + 8px);
-    top: auto;
+    top: calc(100% + 8px);
+    bottom: auto;
     left: 0;
     min-width: 100%;
     z-index: 50;
@@ -551,11 +581,11 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 4px;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     animation: dropdownIn 0.15s ease;
   }
   @keyframes dropdownIn {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
   }
   .version-option {
@@ -711,16 +741,13 @@
   }
 
   .card-actions .version-dropdown {
-    position: relative; /* Anker für das nach oben aufklappende Menü */
+    position: relative; /* Anker für das nach unten aufklappende Menü */
     min-width: 0;
   }
 
-  /* Icon-Buttons (Bearbeiten / KI / Löschen) als Gruppe rechts —
-     unabhängig davon, ob ein Varianten-Dropdown vorhanden ist. */
-  .action-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  /* Zahnrad-Button rechts — öffnet das Aktions-Menü nach unten */
+  .action-dropdown {
+    position: relative;
     margin-left: auto;
   }
 
@@ -740,41 +767,76 @@
     transition: all 0.15s ease;
   }
 
-  .action-btn:hover {
+  .action-btn:hover,
+  .action-btn[aria-expanded='true'] {
     border-color: var(--accent);
     color: var(--accent);
   }
 
-  .action-btn.action-ai {
+  .action-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 230px;
+    z-index: 50;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    animation: dropdownIn 0.15s ease;
+  }
+
+  .action-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    transition: background 0.1s ease;
+  }
+
+  .action-item:hover {
+    background: var(--surface-2);
+  }
+
+  .action-item:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* KI-Assistent: orange Akzent (wie früher der Sparkles-Button) */
+  .action-item.ai {
     color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   }
 
-  .action-btn.action-ai:hover {
-    background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  .action-item.ai:hover {
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   }
 
-  /* Veröffentlicht: globe-Button im aktivem Zustand grün hervorheben */
-  .action-btn.action-published {
+  /* Veröffentlicht: Eintrag grün (Aktion = zurückziehen) */
+  .action-item.published {
     color: #6fcf97;
-    border-color: rgba(111, 207, 151, 0.4);
+  }
+
+  .action-item.published:hover {
     background: rgba(111, 207, 151, 0.1);
   }
 
-  .action-btn.action-published:hover {
-    border-color: #6fcf97;
-  }
-
-  /* Löschen: roter Akzent, letzter in der Gruppe */
-  .action-btn.action-danger {
+  /* Löschen: roter Akzent, letzter Eintrag */
+  .action-item.danger {
     color: var(--danger);
-    border-color: rgba(255, 92, 92, 0.3);
   }
 
-  .action-btn.action-danger:hover {
-    border-color: var(--danger);
+  .action-item.danger:hover {
     background: rgba(255, 92, 92, 0.1);
-    color: var(--danger);
   }
 </style>

@@ -822,8 +822,10 @@ function mapPublishedRow(row: PublishedRow): PublishedListItem {
   const normalized = normalizeDates(row, RECIPE_DATES);
   return {
     ...normalized,
-    is_favorite: Boolean(normalized.is_favorite),
-    is_pinned: Boolean(normalized.is_pinned),
+    // Pin/Favorit sind private Space-Zustände des Urhebers — im
+    // schreibgeschützten öffentlichen Bereich immer aus.
+    is_favorite: false,
+    is_pinned: false,
     is_published: Boolean(normalized.is_published),
     author_label: attributionLabel(row),
     tags: [] as string[]
@@ -945,8 +947,10 @@ export async function getPublishedRecipe(id: number): Promise<PublishedRecipe | 
   const normalized = normalizeDates(rest, RECIPE_DATES);
   return {
     ...(normalized as object),
-    is_favorite: Boolean(normalized.is_favorite),
-    is_pinned: Boolean(normalized.is_pinned),
+    // Pin/Favorit sind private Space-Zustände des Urhebers — im
+    // schreibgeschützten öffentlichen Bereich immer aus.
+    is_favorite: false,
+    is_pinned: false,
     is_published: true,
     author_label: attributionLabel({
       u_name, u_username, u_email,
