@@ -1,8 +1,10 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
+  countAdmins,
   deleteUser,
   getUserBrief,
+  getUserRow,
   requireAdmin,
   setActiveSpace,
   setUserAdmin,
@@ -39,6 +41,16 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     if (typeof body.is_admin !== 'boolean') throw error(422, '"is_admin" muss boolean sein');
     if (id === me.id && body.is_admin === false) {
       throw error(422, 'Der eigene Admin-Status kann nicht entfernt werden');
+    }
+    // Guardrail „letzter Admin": Beim Entziehen prüfen, ob das Ziel
+    // überhaupt Admin ist und danach noch mindestens einer übrig bliebe.
+    // (Der Self-Guard oben deckt den Normalfall ab — diese Prüfung macht
+    // die Invariante explizit und hält sie auch für zukünftige Codepfade.)
+    if (body.is_admin === false) {
+      const target = await getUserRow(id);
+      if (target?.is_admin && (await countAdmins()) <= 1) {
+        throw error(422, 'Der letzte Admin kann seine Rechte nicht verlieren');
+      }
     }
     await setUserAdmin(id, body.is_admin);
   }

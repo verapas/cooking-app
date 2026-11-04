@@ -242,6 +242,24 @@ export async function deleteUser(id: number): Promise<boolean> {
   return result.affectedRows > 0;
 }
 
+/** Anzahl der App-Admins (für den „letzter Admin"-Guardrail). */
+export async function countAdmins(): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS n FROM users WHERE is_admin = 1');
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Minimaler User-Row für Guard-Checks („letzter Admin"-Prüfung). */
+export async function getUserRow(
+  id: number
+): Promise<{ id: number; is_admin: boolean } | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, is_admin FROM users WHERE id = ?',
+    [id]
+  );
+  if (rows.length === 0) return null;
+  return { id: Number(rows[0].id), is_admin: Boolean(rows[0].is_admin) };
+}
+
 /** is_admin schalten. Eigenes Demoten verhindert die aufrufende Route. */
 export async function setUserAdmin(userId: number, isAdmin: boolean): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>('UPDATE users SET is_admin = ? WHERE id = ?', [

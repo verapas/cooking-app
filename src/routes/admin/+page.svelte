@@ -353,16 +353,30 @@
             </span>
           </div>
           <div class="user-actions">
-            <button
-              type="button"
-              class="btn btn-ghost"
-              disabled={busy}
-              onclick={() => toggleAdmin(u.id, u.is_admin, displayName(u))}
-              title={u.is_admin ? 'Admin-Rechte entfernen' : 'Zum App-Admin machen'}
-            >
-              <Icon name={u.is_admin ? 'lock' : 'users'} size={15} />
-              {u.is_admin ? 'Admin entfernen' : 'Admin'}
-            </button>
+            {#if u.id === data.me.id}
+              <!-- Eigenes Konto: Admin-Status ist bewusst nicht entziehbar
+                   (Server: 422) — Button gar nicht erst anbieten. -->
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled
+                title="Der eigene Admin-Status kann nicht entfernt werden"
+              >
+                <Icon name="lock" size={15} />
+                Admin (eigener Account)
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled={busy}
+                onclick={() => toggleAdmin(u.id, u.is_admin, displayName(u))}
+                title={u.is_admin ? 'Admin-Rechte entfernen' : 'Zum App-Admin machen'}
+              >
+                <Icon name={u.is_admin ? 'lock' : 'users'} size={15} />
+                {u.is_admin ? 'Admin entfernen' : 'Admin'}
+              </button>
+            {/if}
             {#if u.id !== data.me.id}
               <button
                 type="button"
