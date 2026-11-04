@@ -50,7 +50,10 @@
   let display = $derived(fmt(remaining));
   // Reset ist ausgegraut, bis der Timer mindestens einmal gestartet wurde
   let started = $derived(running || pausedRemaining !== null);
-  // Kreis-Fortschritt: 0 = voll, 1 = leer
+  // Kreis-Fortschritt: 0 = Start (Ring voll), 1 = abgelaufen (Ring leer).
+  // Der Bogen beginnt bei 12 Uhr VOLL und schrumpft im Uhrzeigersinn:
+  // Der negative dashoffset hält das Bogen-ENDE bei 12 Uhr fixiert und
+  // lässt die Startkante im Uhrzeigersinn nachlaufen.
   let progress = $derived(total > 0 ? 1 - remaining / total : 0);
   const R = 44;
   const CIRC = 2 * Math.PI * R;
@@ -266,26 +269,28 @@
       <Icon name="restart" size={18} />
     </button>
   {:else}
-    <div class="stack">
-      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Minute">−1</button>
-      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Minuten">−5</button>
-    </div>
-    <div class="ring">
-      <svg viewBox="0 0 100 100" aria-hidden="true">
-        <circle class="track" cx="50" cy="50" r={R} />
+    <div class="left">
+      <div class="ring">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="track" cx="50" cy="50" r={R} />
         <circle
           class="prog"
           cx="50" cy="50" r={R}
           stroke-dasharray={CIRC}
-          stroke-dashoffset={CIRC * (1 - progress)}
+          stroke-dashoffset={-CIRC * progress}
         />
-      </svg>
-      <span class="ringicon"><Icon name="timer" size={18} /></span>
-    </div>
-    <span class="time">{display}</span>
-    <div class="stack">
-      <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Minute">+1</button>
-      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Minuten">+5</button>
+        </svg>
+        <span class="ringicon"><Icon name="timer" size={26} /></span>
+      </div>
+      <div class="col">
+        <span class="time">{display}</span>
+        <div class="adjust">
+          <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Minute">−1</button>
+          <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Minuten">−5</button>
+          <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Minuten">+5</button>
+          <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Minute">+1</button>
+        </div>
+      </div>
     </div>
     <div class="right">
       <button
@@ -325,10 +330,23 @@
     border-radius: var(--radius);
     margin-bottom: 16px;
   }
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    /* Zeit leicht nach oben versetzt über den Buttons (Uhr ragt tiefer) */
+    margin-top: -6px;
+  }
   .ring {
     position: relative;
-    width: 42px;
-    height: 42px;
+    width: 54px;
+    height: 54px;
     flex-shrink: 0;
   }
   .ringicon {
@@ -363,11 +381,11 @@
     stroke: var(--success);
   }
   .time {
-    font-size: 1.15rem;
+    font-size: 1.35rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
     white-space: nowrap;
+    line-height: 1.1;
   }
   .timer.finished .time {
     color: var(--success);
@@ -377,10 +395,9 @@
     font-weight: 600;
     flex: 1;
   }
-  .stack {
+  .adjust {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    gap: 5px;
   }
   .adj {
     padding: 4px 9px;
