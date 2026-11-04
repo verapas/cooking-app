@@ -1,6 +1,18 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requireAdmin, setActiveSpace, setUserAdmin, userExists } from '$lib/server/admin';
+import {
+  deleteUser,
+  getUserBrief,
+  requireAdmin,
+  setActiveSpace,
+  setUserAdmin,
+  userExists
+} from '$lib/server/admin';
+import {
+  deleteKeycloakUser,
+  keycloakAdminConfigured,
+  KeycloakAdminError
+} from '$lib/server/keycloakAdmin';
 
 // PUT /api/admin/users/[id] — Benutzer-Flags ändern (nur App-Admins).
 //
@@ -39,5 +51,38 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     if (!ok) throw error(422, 'Benutzer ist kein Mitglied dieses Spaces');
   }
 
+  return json({ ok: true });
+};
+
+// DELETE /api/admin/users/[id] — Benutzer löschen (nur App-Admins).
+//
+// Reihenfolge: Erst das Keycloak-Konto (per sub), dann die lokale Zeile —
+// schlägt Keycloak fehl, wird NICHT lokal gelöscht, sonst loggt sich der
+// Benutzer beim nächsten Login einfach neu an (upsertUser legt die Zeile
+// wieder an). Selbst-Löschen ist verboten (letzter-Admin-Schutz).
+// Rezepte des Benutzers bleiben in ihren Spaces (created_by → NULL),
+// Sessions/Memberships fallen per CASCADE.
+export const DELETE: RequestHandler = async ({ locals, params }) => {
+  const me = requireAdmin(locals);
+  const id = Number(params.id);
+  if (!Number.isInteger(id) || id <= 0) throw error(400, 'Ungültige Benutzer-ID');
+  if (id === me.id) throw error(422, 'Der eigene Account kann nicht gelöscht werden');
+
+  const user = await getUserBrief(id);
+  if (!user) throw error(404, 'Benutzer nicht gefunden');
+
+  if (keycloakAdminConfigured()) {
+    try {
+      await deleteKeycloakUser(user.sub);
+    } catch (err) {
+      if (err instanceof KeycloakAdminError) throw error(502, err.message);
+      throw err;
+    }
+  }
+  // Ohne Admin-API-Client bleibt das Keycloak-Konto bestehen — der
+  // Benutzer könnte sich wieder einloggen (lokal erscheint er dann neu).
+
+  const ok = await deleteUser(id);
+  if (!ok) throw error(404, 'Benutzer nicht gefunden');
   return json({ ok: true });
 };

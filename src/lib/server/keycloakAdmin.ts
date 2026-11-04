@@ -139,3 +139,26 @@ export async function createKeycloakUser(input: KeycloakUserInput): Promise<stri
     `Keycloak-Fehler (HTTP ${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`
   );
 }
+
+/**
+ * Löscht einen Benutzer in Keycloak (per sub/UUID). 404 gilt als Erfolg —
+ * das Konto ist dann schon weg, die lokale Zeile soll trotzdem fliegen.
+ */
+export async function deleteKeycloakUser(sub: string): Promise<void> {
+  const { base, realm } = issuerParts();
+  const token = await getAdminToken();
+  const res = await fetch(`${base}/admin/realms/${realm}/users/${encodeURIComponent(sub)}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` }
+  });
+  if (res.ok || res.status === 404) return;
+  if (res.status === 403) {
+    throw new KeycloakAdminError(
+      'Keycloak verweigert das Löschen (403) — dem Service-Account fehlt vermutlich die Rolle „manage-users".'
+    );
+  }
+  const detail = await res.text().catch(() => '');
+  throw new KeycloakAdminError(
+    `Keycloak-Fehler (HTTP ${res.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`
+  );
+}

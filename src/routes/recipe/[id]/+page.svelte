@@ -225,21 +225,88 @@
       <div class="hero">
         <img src={imageUrl} alt={recipe.title} />
       </div>
-      <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
     {:else}
       <div class="hero hero-empty">
         <Icon name="image" size={48} />
       </div>
-      <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
     {/if}
-    <button
-      class="hero-upload"
-      onclick={() => document.getElementById('image-input')?.click()}
-      disabled={uploadBusy}
-      aria-label={imageUrl ? 'Bild ändern' : 'Bild hochladen'}
-    >
-      <Icon name="camera" size={18} />
-    </button>
+    <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={onImageChange} hidden />
+
+    <!--
+      Alle Aktionen (inkl. Bild-Upload) in EINEM Dropdown (Zahnrad) —
+      sitzt oben rechts auf dem Foto (ehemaliger Kamera-Button-Platz).
+    -->
+    <div class="action-dropdown">
+      <button
+        type="button"
+        class="action-btn"
+        onclick={() => (actionDropdownOpen = !actionDropdownOpen)}
+        aria-label="Aktionen"
+        aria-haspopup="menu"
+        aria-expanded={actionDropdownOpen}
+        title="Aktionen"
+      >
+        <Icon name="cog" size={18} />
+      </button>
+      {#if actionDropdownOpen}
+        <div class="action-menu" role="menu">
+          <button
+            type="button"
+            class="action-item"
+            role="menuitem"
+            onclick={() => {
+              actionDropdownOpen = false;
+              document.getElementById('image-input')?.click();
+            }}
+            disabled={uploadBusy}
+          >
+            <Icon name="camera" size={16} />
+            {imageUrl ? 'Bild ändern' : 'Bild hochladen'}
+          </button>
+          <a
+            class="action-item"
+            role="menuitem"
+            href="/recipe/{recipe.id}/edit"
+            onclick={() => (actionDropdownOpen = false)}
+          >
+            <Icon name="edit" size={16} /> Bearbeiten
+          </a>
+          <a
+            class="action-item ai"
+            role="menuitem"
+            href="/chat?recipe={recipe.id}"
+            onclick={() => (actionDropdownOpen = false)}
+          >
+            <Icon name="sparkles" size={16} /> KI-Assistent
+          </a>
+          <button
+            type="button"
+            class="action-item"
+            class:published={isPublished}
+            role="menuitem"
+            onclick={() => {
+              actionDropdownOpen = false;
+              void togglePublish();
+            }}
+            disabled={publishBusy}
+          >
+            <Icon name="globe" size={16} />
+            {isPublished ? 'Veröffentlichung zurückziehen' : 'Veröffentlichen'}
+          </button>
+          <button
+            type="button"
+            class="action-item danger"
+            role="menuitem"
+            onclick={() => {
+              actionDropdownOpen = false;
+              void deleteRecipe();
+            }}
+          >
+            <Icon name="trash" size={16} /> Löschen
+          </button>
+        </div>
+      {/if}
+    </div>
 
     <div class="card-body">
       {#if isPublished}
@@ -293,8 +360,10 @@
       </div>
     </div>
 
-    <div class="card-actions">
-      {#if hasVersions}
+    <!-- Footer nur, wenn er Inhalt hat — ohne Varianten gibt es hier
+         nichts mehr zu tun (Aktionen sitzen im Zahnrad auf dem Foto). -->
+    {#if hasVersions}
+      <div class="card-actions">
         <div class="version-dropdown">
           <button class="version-trigger" onclick={() => versionDropdownOpen = !versionDropdownOpen}>
             <Icon name="branch" size={16} />
@@ -318,69 +387,8 @@
             </div>
           {/if}
         </div>
-      {/if}
-
-      <!-- Alle Aktionen in EINEM Dropdown (Zahnrad) — Bearbeiten, KI,
-           Veröffentlichen, Löschen; Icons + Labels wie im Versionen-Menü. -->
-      <div class="action-dropdown">
-        <button
-          type="button"
-          class="action-btn"
-          onclick={() => (actionDropdownOpen = !actionDropdownOpen)}
-          aria-label="Aktionen"
-          aria-haspopup="menu"
-          aria-expanded={actionDropdownOpen}
-          title="Aktionen"
-        >
-          <Icon name="cog" size={18} />
-        </button>
-        {#if actionDropdownOpen}
-          <div class="action-menu" role="menu">
-            <a
-              class="action-item"
-              role="menuitem"
-              href="/recipe/{recipe.id}/edit"
-              onclick={() => (actionDropdownOpen = false)}
-            >
-              <Icon name="edit" size={16} /> Bearbeiten
-            </a>
-            <a
-              class="action-item ai"
-              role="menuitem"
-              href="/chat?recipe={recipe.id}"
-              onclick={() => (actionDropdownOpen = false)}
-            >
-              <Icon name="sparkles" size={16} /> KI-Assistent
-            </a>
-            <button
-              type="button"
-              class="action-item"
-              class:published={isPublished}
-              role="menuitem"
-              onclick={() => {
-                actionDropdownOpen = false;
-                void togglePublish();
-              }}
-              disabled={publishBusy}
-            >
-              <Icon name="globe" size={16} />
-              {isPublished ? 'Veröffentlichung zurückziehen' : 'Veröffentlichen'}
-            </button>
-            <button
-              type="button"
-              class="action-item danger"
-              role="menuitem"
-              onclick={() => {
-                actionDropdownOpen = false;
-                void deleteRecipe();
-              }}
-            >
-              <Icon name="trash" size={16} /> Löschen
-            </button>
-          </div>
-        {/if}
       </div>
-    </div>
+    {/if}
   </article>
 
   {#if mode === 'classic'}
@@ -432,6 +440,12 @@
   .card-body {
     padding: 16px 16px 18px;
   }
+  /* Ohne Karten-Footer (keine Varianten) ist card-body das letzte Element
+     und rundet die unteren Ecken selbst ab (die Karte clippt bewusst
+     nicht, sonst würden die Dropdowns abgeschnitten). */
+  .card-body:last-child {
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+  }
 
   .hero {
     aspect-ratio: 16 / 10;
@@ -444,32 +458,6 @@
     height: 100%;
     object-fit: cover;
     display: block;
-  }
-  .hero-upload {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--surface) 80%, transparent);
-    color: var(--text);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s ease;
-    backdrop-filter: blur(4px);
-  }
-  .hero-upload:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--surface) 95%, transparent);
-  }
-  .hero-upload:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
   .hero-empty {
     display: flex;
@@ -731,32 +719,37 @@
     min-width: 0;
   }
 
-  /* Zahnrad-Button rechts — öffnet das Aktions-Menü nach unten */
+  /* Zahnrad-Button oben rechts auf dem Foto (ehemaliger Kamera-Platz) —
+     öffnet das Aktions-Menü nach unten */
   .action-dropdown {
-    position: relative;
-    margin-left: auto;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 20; /* über dem Hero-Bild */
   }
 
   .action-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
     padding: 0;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
     color: var(--text);
     cursor: pointer;
     text-decoration: none;
     transition: all 0.15s ease;
+    backdrop-filter: blur(4px);
   }
 
   .action-btn:hover,
   .action-btn[aria-expanded='true'] {
     border-color: var(--accent);
     color: var(--accent);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
   }
 
   .action-menu {

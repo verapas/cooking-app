@@ -331,6 +331,9 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
   users-Zeile + optional Membership; Body `{ username, email?, name?, password, space_id? }`)
 - `PUT /api/admin/users/[id]` - `{ is_admin? }` schalten (Self-Demote → 422)
   und/oder `{ active_space_id }` setzen (Membership nötig)
+- `DELETE /api/admin/users/[id]` - Benutzer löschen: erst Keycloak-Konto
+  (per sub, wenn Admin-API konfiguriert), dann lokale Zeile (Sessions/
+  Memberships per CASCADE; Rezepte bleiben, created_by → NULL). Self-Delete → 422
 - `POST /api/admin/spaces` - Space anlegen (`{ name }`)
 - `PUT /api/admin/spaces/[id]` - Space umbenennen (`{ name }`)
 - `DELETE /api/admin/spaces/[id]` - Space **mit Content** löschen (Rezepte,

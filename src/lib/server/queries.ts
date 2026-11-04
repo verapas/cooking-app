@@ -629,6 +629,44 @@ export async function updateRecipe(
   }
 }
 
+/** Bild-URLs, die beim Löschen eines Rezepts vom Dateisystem verschwinden
+ *  könnten — VOR dem DB-Delete einsammeln:
+ *    scope=all ODER Ziel ist das Hauptrezept (Varianten fallen per
+ *    DB-Cascade mit) → ganze Familie; sonst (Variante) nur deren Bild.
+ *  Achtung: URLs können geteilt sein (Varianten ohne eigenes Upload
+ *  übernehmen die URL des Elternrezepts) — ob eine Datei wirklich fällt,
+ *  entscheidet filterUnreferencedImageUrls NACH dem Delete. */
+export async function listDeleteImageUrls(
+  spaceId: number,
+  recipeId: number,
+  scopeAll: boolean
+): Promise<string[]> {
+  const mainId = await getMainRecipeId(spaceId, recipeId);
+  if (!mainId) return [];
+  const whole = scopeAll || mainId === recipeId;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    whole
+      ? `SELECT DISTINCT image_url FROM recipes
+         WHERE space_id = ? AND (id = ? OR parent_recipe_id = ?) AND image_url IS NOT NULL`
+      : 'SELECT image_url FROM recipes WHERE space_id = ? AND id = ? AND image_url IS NOT NULL',
+    whole ? [spaceId, mainId, mainId] : [spaceId, recipeId]
+  );
+  return rows.map((r) => r.image_url as string);
+}
+
+/** Filtert die Kandidaten-URLs auf die, auf die NACH dem Delete keine
+ *  recipes-Zeile mehr verweist — nur die dürfen physisch gelöscht werden
+ *  (geteilte Dateien, z. B. Variante ohne eigenes Bild, bleiben). */
+export async function filterUnreferencedImageUrls(urls: string[]): Promise<string[]> {
+  if (urls.length === 0) return [];
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT DISTINCT image_url FROM recipes WHERE image_url IN (?)',
+    [urls]
+  );
+  const referenced = new Set(rows.map((r) => r.image_url as string));
+  return urls.filter((u) => !referenced.has(u));
+}
+
 export async function deleteRecipe(spaceId: number, id: number): Promise<boolean> {
   const [result] = await pool.execute<ResultSetHeader>(
     'DELETE FROM recipes WHERE id = ? AND space_id = ?',

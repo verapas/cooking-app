@@ -5,8 +5,9 @@ import type { PageServerLoad } from './$types';
 
 // /admin — Benutzerverwaltung (nur App-Admins). Nicht-Admins bekommen 403.
 export const load: PageServerLoad = async ({ locals }) => {
-  requireAdmin(locals);
+  const me = requireAdmin(locals);
   return {
+    me: { id: me.id },
     users: await listAdminUsers(),
     spaces: await listAdminSpaces(),
     kcConfigured: keycloakAdminConfigured()

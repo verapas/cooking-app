@@ -102,6 +102,27 @@
     await api(`/api/admin/users/${userId}`, jsonInit('PUT', { active_space_id: spaceId }), 'Aktiver Space gesetzt.');
   }
 
+  /** Löscht einen Benutzer (Keycloak-Konto + lokale Zeile). Der eigene
+   *  Account ist ausgeschlossen (Button wird gar nicht erst angeboten). */
+  async function deleteUser(userId: number, label: string) {
+    const confirmed = await swalFire({
+      title: `„${label}“ löschen?`,
+      html: `Das entfernt das <b>Keycloak-Konto</b> und die lokale Zeile inkl.
+        Sessions und Space-Mitgliedschaften.
+        ${data.kcConfigured
+          ? ''
+          : '<br><b>Hinweis:</b> Die Keycloak-Verbindung ist nicht konfiguriert — das Keycloak-Konto bleibt bestehen und der Benutzer könnte sich neu einloggen.'}
+        <br>Seine Rezepte bleiben in ihren Spaces erhalten.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Endgültig löschen',
+      confirmButtonColor: 'var(--danger)',
+      cancelButtonText: 'Abbrechen'
+    });
+    if (!confirmed.isConfirmed) return;
+    await api(`/api/admin/users/${userId}`, { method: 'DELETE' }, `„${label}“ gelöscht.`);
+  }
+
   // --- Aktionen: Spaces ---
   async function createSpace(e: Event) {
     e.preventDefault();
@@ -342,6 +363,17 @@
               <Icon name={u.is_admin ? 'lock' : 'users'} size={15} />
               {u.is_admin ? 'Admin entfernen' : 'Admin'}
             </button>
+            {#if u.id !== data.me.id}
+              <button
+                type="button"
+                class="btn btn-danger"
+                disabled={busy}
+                onclick={() => deleteUser(u.id, displayName(u))}
+                title="Benutzer löschen (Keycloak-Konto + App-Zugang)"
+              >
+                <Icon name="trash" size={15} /> Löschen
+              </button>
+            {/if}
           </div>
         </li>
       {/each}

@@ -147,6 +147,16 @@ export async function userExists(id: number): Promise<boolean> {
  * KI-Settings bleiben erhalten: Sie sind seit V12 nutzerspezifisch und
  * gehören nicht mehr zum Space-Content.
  */
+/** Bild-URLs aller Rezepte eines Spaces (fürs Datei-Aufräumen beim
+ *  Space-Löschen — VOR deleteSpace einsammeln). */
+export async function listSpaceImageUrls(spaceId: number): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT image_url FROM recipes WHERE space_id = ? AND image_url IS NOT NULL',
+    [spaceId]
+  );
+  return rows.map((r) => r.image_url as string);
+}
+
 export async function deleteSpace(id: number): Promise<boolean> {
   const conn = await pool.getConnection();
   try {
@@ -208,6 +218,29 @@ export async function setActiveSpace(userId: number, spaceId: number): Promise<b
 // =====================================================================
 // Benutzer-Flags & lokale Benutzer-Zeile
 // =====================================================================
+
+/** Minimal-Datensatz eines Benutzers (fürs Löschen: Keycloak-sub etc.). */
+export async function getUserBrief(
+  id: number
+): Promise<{ id: number; sub: string; username: string | null } | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, sub, username FROM users WHERE id = ?',
+    [id]
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0] as { id: number; sub: string; username: string | null };
+  return { id: Number(row.id), sub: row.sub, username: row.username };
+}
+
+/**
+ * Löscht die lokale users-Zeile. Sessions und Space-Memberships fallen
+ * per CASCADE mit weg; recipes.created_by wird per FK auf NULL gesetzt —
+ * Rezepte bleiben also in ihren Spaces erhalten (nur ohne Urheber-Name).
+ */
+export async function deleteUser(id: number): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>('DELETE FROM users WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
 
 /** is_admin schalten. Eigenes Demoten verhindert die aufrufende Route. */
 export async function setUserAdmin(userId: number, isAdmin: boolean): Promise<boolean> {

@@ -1,6 +1,14 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { deleteSpace, renameSpace, requireAdmin, spaceExists } from '$lib/server/admin';
+import {
+  deleteSpace,
+  listSpaceImageUrls,
+  renameSpace,
+  requireAdmin,
+  spaceExists
+} from '$lib/server/admin';
+import { removeImageFile } from '$lib/server/images';
+import { filterUnreferencedImageUrls } from '$lib/server/queries';
 
 // PUT /api/admin/spaces/[id] — Space umbenennen (nur App-Admins).
 export const PUT: RequestHandler = async ({ locals, params, request }) => {
@@ -33,7 +41,12 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
   if (!Number.isInteger(id) || id <= 0) throw error(400, 'Ungültige Space-ID');
   if (!(await spaceExists(id))) throw error(404, 'Space nicht gefunden');
 
+  // Bild-Dateien VOR dem Delete einsammeln; danach nur löschen, was keine
+  // DB-Referenz mehr hat.
+  const candidates = await listSpaceImageUrls(id);
   const ok = await deleteSpace(id);
   if (!ok) throw error(404, 'Space nicht gefunden');
+  const urls = await filterUnreferencedImageUrls(candidates);
+  await Promise.all(urls.map((u) => removeImageFile(u)));
   return json({ ok: true });
 };

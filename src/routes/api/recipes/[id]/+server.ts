@@ -3,10 +3,13 @@ import type { RequestHandler } from './$types';
 import {
   deleteRecipe,
   deleteRecipeFamily,
+  filterUnreferencedImageUrls,
   getRecipe,
+  listDeleteImageUrls,
   updateRecipe,
   normalizeTagNames
 } from '$lib/server/queries';
+import { removeImageFile } from '$lib/server/images';
 import { requireSpaceId } from '$lib/server/spaces';
 import type { RecipeInput } from '$lib/types';
 
@@ -44,10 +47,16 @@ export const DELETE: RequestHandler = async ({ locals, params, url }) => {
   const id = Number(params.id);
   if (isNaN(id)) throw error(400, 'Ungültige Rezept-ID');
 
-  const ok =
-    url.searchParams.get('scope') === 'all'
-      ? await deleteRecipeFamily(spaceId, id)
-      : await deleteRecipe(spaceId, id);
+  // Bild-Kandidaten VOR dem Delete einsammeln; NACH dem Delete nur die
+  // Dateien löschen, auf die keine recipes-Zeile mehr verweist (geteilte
+  // URLs — Variante ohne eigenes Bild — überleben so intakt).
+  const scopeAll = url.searchParams.get('scope') === 'all';
+  const candidates = await listDeleteImageUrls(spaceId, id, scopeAll);
+  const ok = scopeAll
+    ? await deleteRecipeFamily(spaceId, id)
+    : await deleteRecipe(spaceId, id);
   if (!ok) throw error(404, 'Rezept nicht gefunden');
+  const urls = await filterUnreferencedImageUrls(candidates);
+  await Promise.all(urls.map((u) => removeImageFile(u)));
   return json({ ok: true });
 };
