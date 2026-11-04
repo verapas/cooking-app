@@ -3,7 +3,7 @@
   import { unlockAudio } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
   import { ensureNotificationPermission } from '$lib/notify';
-  import { alarm, fireTimerDone, silenceAlarm, unwatchTimer, watchTimer } from '$lib/alarm.svelte';
+  import { alarm, fireTimerDone, fmtCountdown, silenceAlarm, unwatchTimer, watchTimer } from '$lib/alarm.svelte';
   import Icon from './Icon.svelte';
 
   let {
@@ -48,15 +48,15 @@
   );
   let running = $derived(endAt !== null);
   let display = $derived(fmt(remaining));
+  // Reset ist ausgegraut, bis der Timer mindestens einmal gestartet wurde
+  let started = $derived(running || pausedRemaining !== null);
   // Kreis-Fortschritt: 0 = voll, 1 = leer
   let progress = $derived(total > 0 ? 1 - remaining / total : 0);
   const R = 44;
   const CIRC = 2 * Math.PI * R;
 
   function fmt(s: number): string {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${String(sec).padStart(2, '0')}`;
+    return fmtCountdown(s);
   }
 
   function persist(): void {
@@ -196,11 +196,18 @@
     durationSec;
     const old = prevStepId;
     prevStepId = stepId;
-    // Beim Wechsel zum nächsten Schritt: Watch des ALTEN Timers lösen
-    // (der neue meldet sich selbst über restore()/start() wieder an).
-    // Beim Unmount bewusst NICHT abmelden — der Timer soll ja app-weit
-    // weiterlaufen und läuten.
-    if (old !== stepId) unwatchTimer(old);
+    // Beim Wechsel zum nächsten Schritt („Weiter") wird ein laufender
+    // Timer KOMPLETT gestoppt: Watcher abmelden + Speicher des alten
+    // Schritts löschen, damit dort kein Zombie-Timer weiterläuft.
+    // Beim Unmount bewusst NICHT — dann soll der Timer app-weit weiterlaufen.
+    if (old !== stepId) {
+      unwatchTimer(old);
+      try {
+        sessionStorage.removeItem(`step-timer:${old}`);
+      } catch {
+        /* ignorieren */
+      }
+    }
     stopInterval();
     endAt = null;
     pausedRemaining = null;
@@ -259,7 +266,7 @@
       <Icon name="restart" size={18} />
     </button>
   {:else}
-    <div class="adjust">
+    <div class="stack">
       <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Minute">−1</button>
       <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Minuten">−5</button>
     </div>
@@ -276,22 +283,33 @@
       <span class="ringicon"><Icon name="timer" size={18} /></span>
     </div>
     <span class="time">{display}</span>
-    <div class="adjust">
-      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Minuten">+5</button>
+    <div class="stack">
       <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Minute">+1</button>
+      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Minuten">+5</button>
     </div>
-    <button
-      class="ctl ctl-primary"
-      onclick={running ? pause : start}
-      aria-label={running ? 'Timer pausieren' : remaining < total ? 'Timer fortsetzen' : 'Timer starten'}
-      title={running ? 'Pause' : 'Start'}
-    >
-      {#if running}
-        <Icon name="pause" size={18} />
-      {:else}
-        <Icon name="play" size={18} filled />
-      {/if}
-    </button>
+    <div class="right">
+      <button
+        class="ctl"
+        onclick={reset}
+        disabled={!started}
+        aria-label="Timer zurücksetzen"
+        title={started ? 'Zurücksetzen' : 'Starte den Timer zuerst'}
+      >
+        <Icon name="restart" size={18} />
+      </button>
+      <button
+        class="ctl ctl-primary"
+        onclick={running ? pause : start}
+        aria-label={running ? 'Timer pausieren' : remaining < total ? 'Timer fortsetzen' : 'Timer starten'}
+        title={running ? 'Pause' : 'Start'}
+      >
+        {#if running}
+          <Icon name="pause" size={18} />
+        {:else}
+          <Icon name="play" size={18} filled />
+        {/if}
+      </button>
+    </div>
   {/if}
 </div>
 
@@ -349,6 +367,7 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
+    white-space: nowrap;
   }
   .timer.finished .time {
     color: var(--success);
@@ -358,20 +377,22 @@
     font-weight: 600;
     flex: 1;
   }
-  .adjust {
+  .stack {
     display: flex;
-    gap: 5px;
+    flex-direction: column;
+    gap: 4px;
   }
   .adj {
-    padding: 6px 9px;
+    padding: 4px 9px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition: all 0.15s ease;
+    text-align: center;
   }
   .adj:hover:not(:disabled) {
     border-color: var(--accent);
@@ -380,6 +401,12 @@
   .adj:disabled {
     opacity: 0.3;
     cursor: default;
+  }
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
   }
   .ctl {
     display: flex;
@@ -394,6 +421,14 @@
     color: var(--text);
     cursor: pointer;
     transition: all 0.15s ease;
+  }
+  .ctl:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .ctl:disabled:hover {
+    border-color: var(--border);
+    color: var(--text);
   }
   .ctl:hover {
     border-color: var(--accent);

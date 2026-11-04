@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { toggleDrawer } from '$lib/nav.svelte';
-  import { alarm, silenceAlarm, stopRunningTimer } from '$lib/alarm.svelte';
+  import { alarm, fmtCountdown, silenceAlarm, stopRunningTimer } from '$lib/alarm.svelte';
   import CategoryIcon from './CategoryIcon.svelte';
   import Icon from './Icon.svelte';
   import type { Category } from '$lib/types';
@@ -33,10 +33,7 @@
   let runningRemaining = $derived(
     alarm.running ? Math.max(0, Math.ceil((alarm.running.endAt - alarm.now) / 1000)) : 0
   );
-  const runningDisplay = $derived.by(() => {
-    const s = runningRemaining;
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  });
+  const runningDisplay = $derived(fmtCountdown(runningRemaining));
 </script>
 
 <header class="topbar">

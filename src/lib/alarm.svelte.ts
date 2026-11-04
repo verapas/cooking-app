@@ -28,6 +28,16 @@ export function silenceAlarm(): void {
   alarm.stop?.();
 }
 
+/** Restzeit als m:ss bzw. h:mm:ss (ab einer Stunde). */
+export function fmtCountdown(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
 /** Laufenden Timer anhalten (TopBar-Stopp): abmelden + Speicher aufräumen. */
 export function stopRunningTimer(): void {
   const r = alarm.running;
@@ -98,8 +108,22 @@ function ensureTicking(): void {
   }, 500);
 }
 
-/** Timer (neu) anmelden — überschreibt eine bestehende Anmeldung. */
+/**
+ * Timer (neu) anmelden — überschreibt eine bestehende Anmeldung.
+ * Es kann app-weit maximal EIN Timer laufen: Ein bereits laufender
+ * (anderer) Timer wird zunichte gemacht, inklusive seines sessionStorage-
+ * Eintrags (dessen StepTimer-Komponente resettet sich beim nächsten Tick).
+ */
 export function watchTimer(stepId: number, endAt: number, total: number, label: string): void {
+  for (const [id] of watchers) {
+    if (id === stepId) continue;
+    watchers.delete(id);
+    try {
+      sessionStorage.removeItem(`step-timer:${id}`);
+    } catch {
+      /* ignorieren */
+    }
+  }
   watchers.set(stepId, { stepId, endAt, total, label });
   alarm.running = { stepId, endAt, label };
   ensureTicking();
