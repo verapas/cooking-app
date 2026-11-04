@@ -59,7 +59,7 @@
 
     <div class="stepcard">
       {#if current.duration_sec}
-        <StepTimer durationSec={current.duration_sec} />
+        <StepTimer durationSec={current.duration_sec} stepId={current.id} label={`Schritt ${index + 1}`} />
       {/if}
 
       {#if stepIngredients.length}
