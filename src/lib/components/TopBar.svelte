@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { toggleDrawer } from '$lib/nav.svelte';
+  import { alarm, silenceAlarm } from '$lib/alarm.svelte';
   import CategoryIcon from './CategoryIcon.svelte';
+  import Icon from './Icon.svelte';
   import type { Category } from '$lib/types';
 
   let { categories = [] }: { categories?: Category[] } = $props();
@@ -40,6 +42,16 @@
     <span class="logo"><CategoryIcon icon={current.icon} size={20} /></span>
     {current.label}
   </span>
+  {#if alarm.ringing}
+    <button
+      class="alarm"
+      onclick={silenceAlarm}
+      aria-label="Timer-Alarm ausschalten"
+      title="Timer ausschalten"
+    >
+      <Icon name="timer" size={24} />
+    </button>
+  {/if}
 </header>
 
 <style>
@@ -100,5 +112,28 @@
     color: var(--accent);
     display: inline-flex;
     flex-shrink: 0;
+  }
+  .alarm {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--tap);
+    height: var(--tap);
+    padding: 10px;
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+    animation: wobble 0.5s ease-in-out infinite;
+    transform-origin: 50% 60%;
+  }
+  .alarm:active {
+    opacity: 0.6;
+  }
+  @keyframes wobble {
+    0%, 100% { transform: rotate(-14deg); }
+    50% { transform: rotate(14deg); }
   }
 </style>

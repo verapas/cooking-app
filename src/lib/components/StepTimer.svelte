@@ -3,6 +3,7 @@
   import { playAlarm, unlockAudio, vibrate } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
   import { ensureNotificationPermission, notifyTimerDone } from '$lib/notify';
+  import { alarm } from '$lib/alarm.svelte';
   import Icon from './Icon.svelte';
 
   let {
@@ -129,6 +130,9 @@
   function stopAlarmSound(): void {
     stopAlarm?.();
     stopAlarm = null;
+    // Globale Anzeige (TopBar-Wecker) mit ausblenden
+    alarm.ringing = false;
+    alarm.stop = null;
   }
 
   function finish(): void {
@@ -140,6 +144,13 @@
     stopAlarmSound();
     stopAlarm = playAlarm();
     vibrate([500, 200, 500, 200, 500, 200, 500]);
+    // Wecker-Symbol in der TopBar zeigen; Klick dort stoppt den Ton.
+    // playAlarm gibt nach ~30 s von selbst auf → Anzeige mit ausblenden.
+    alarm.ringing = true;
+    alarm.stop = stopAlarmSound;
+    setTimeout(() => {
+      if (alarm.stop === stopAlarmSound) stopAlarmSound();
+    }, 30500);
     // Notification vor allem, wenn die App gerade nicht sichtbar ist —
     // dann bringt der In-App-Bleep nichts.
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
@@ -236,61 +247,66 @@
 </script>
 
 <div class="timer" class:finished class:running>
-  <div class="ring">
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-      <circle class="track" cx="50" cy="50" r={R} />
-      <circle
-        class="prog"
-        cx="50" cy="50" r={R}
-        stroke-dasharray={CIRC}
-        stroke-dashoffset={CIRC * (1 - progress)}
-      />
-    </svg>
-    <div class="time">{display}</div>
-  </div>
-
-  <div class="actions">
-    {#if finished}
-      <span class="done"><Icon name="check" size={18} /> Zeit ist um!</span>
-      <button class="btn" onclick={reset}><Icon name="restart" size={18} /> Zurücksetzen</button>
-    {:else if running}
-      <button class="btn" onclick={pause}><Icon name="pause" size={18} /> Pause</button>
-    {:else}
-      <button class="btn btn-primary bigbtn" onclick={start}>
-        <Icon name="play" size={18} filled /> {remaining < total ? 'Weiter' : 'Timer starten'}
-      </button>
-      {#if remaining < total}
-        <button class="btn" onclick={reset} aria-label="Zurücksetzen"><Icon name="restart" size={18} /></button>
-      {/if}
-    {/if}
-  </div>
-
-  {#if !finished}
-    <div class="adjust">
-      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300}>−5 Min</button>
-      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60}>−1 Min</button>
-      <button class="adj" onclick={() => adjustTime(60)}>+1 Min</button>
-      <button class="adj" onclick={() => adjustTime(300)}>+5 Min</button>
+  {#if finished}
+    <span class="done"><Icon name="check" size={16} /> Zeit ist um!</span>
+    <button class="ctl" onclick={reset} aria-label="Timer zurücksetzen" title="Zurücksetzen">
+      <Icon name="restart" size={18} />
+    </button>
+  {:else}
+    <div class="ring" aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <circle class="track" cx="50" cy="50" r={R} />
+        <circle
+          class="prog"
+          cx="50" cy="50" r={R}
+          stroke-dasharray={CIRC}
+          stroke-dashoffset={CIRC * (1 - progress)}
+        />
+      </svg>
     </div>
+    <span class="time">{display}</span>
+    <div class="adjust">
+      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Min">−1</button>
+      <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Min">+1</button>
+      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Min">−5</button>
+      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Min">+5</button>
+    </div>
+    <button
+      class="ctl ctl-primary"
+      onclick={running ? pause : start}
+      aria-label={running ? 'Timer pausieren' : remaining < total ? 'Timer fortsetzen' : 'Timer starten'}
+      title={running ? 'Pause' : 'Start'}
+    >
+      {#if running}
+        <Icon name="pause" size={18} />
+      {:else}
+        <Icon name="play" size={18} filled />
+      {/if}
+    </button>
+    {#if remaining < total}
+      <button class="ctl" onclick={reset} aria-label="Timer zurücksetzen" title="Zurücksetzen">
+        <Icon name="restart" size={18} />
+      </button>
+    {/if}
   {/if}
 </div>
 
 <style>
   .timer {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 14px;
-    padding: 16px;
+    gap: 12px;
+    padding: 10px 12px;
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: 16px;
   }
   .ring {
-    position: relative;
-    width: 130px;
-    height: 130px;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
   }
   .ring svg {
     width: 100%;
@@ -300,12 +316,12 @@
   .track {
     fill: none;
     stroke: var(--surface-3);
-    stroke-width: 8;
+    stroke-width: 10;
   }
   .prog {
     fill: none;
     stroke: var(--accent);
-    stroke-width: 8;
+    stroke-width: 10;
     stroke-linecap: round;
     transition: stroke-dashoffset 1s linear;
   }
@@ -313,43 +329,32 @@
     stroke: var(--success);
   }
   .time {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
+    font-size: 1.15rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
   .timer.finished .time {
     color: var(--success);
   }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
   .done {
     color: var(--success);
     font-weight: 600;
-  }
-  .bigbtn {
-    padding-left: 24px;
-    padding-right: 24px;
+    flex: 1;
   }
   .adjust {
     display: flex;
-    gap: 8px;
-    justify-content: center;
+    gap: 6px;
+    margin-left: auto;
   }
   .adj {
-    padding: 6px 12px;
+    padding: 6px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
     font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition: all 0.15s ease;
   }
@@ -360,5 +365,32 @@
   .adj:disabled {
     opacity: 0.3;
     cursor: default;
+  }
+  .ctl {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ctl:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .ctl-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--surface);
+  }
+  .ctl-primary:hover {
+    filter: brightness(1.1);
+    color: var(--surface);
   }
 </style>
