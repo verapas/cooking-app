@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Ingredient, Step } from '$lib/types';
   import { formatIngredient } from '$lib/portion';
+  import { unwatchTimer } from '$lib/alarm.svelte';
   import StepTimer from './StepTimer.svelte';
   import Icon from './Icon.svelte';
 
@@ -25,7 +26,26 @@
   let progress = $derived(total > 0 ? ((index + 1) / total) * 100 : 0);
   let isLast = $derived(index >= total - 1);
 
+  // Beim Verlassen eines Schritts (Weiter/Zurück/Fertig) wird dessen Timer
+  // KOMPLETT gestoppt: Watcher abmelden + sessionStorage-Eintrag löschen.
+  // Muss hier in next()/prev() passieren und NICHT im StepTimer-$effect:
+  // Bei sehr schnellen Klicks (Weiter+Zurück im selben Frame) springt die
+  // stepId 1→2→1, bevor der Effect läuft — ein Prop-Vergleich „alt ≠ neu"
+  // sieht dann 1===1 und räumt NIE auf, der Watcher des Zwischenschritts
+  // lief als Zombie weiter (TopBar zeigte einen Timer zu einem Schritt,
+  // der gar nicht mehr sichtbar war).
+  function leaveStep(id: number | undefined): void {
+    if (id === undefined) return;
+    unwatchTimer(id);
+    try {
+      sessionStorage.removeItem(`step-timer:${id}`);
+    } catch {
+      /* ignorieren */
+    }
+  }
+
   function next(): void {
+    leaveStep(current?.id);
     if (isLast) {
       done = true;
       return;
@@ -33,9 +53,11 @@
     index += 1;
   }
   function prev(): void {
+    leaveStep(current?.id);
     if (index > 0) index -= 1;
   }
   function restart(): void {
+    leaveStep(current?.id);
     index = 0;
     done = false;
   }
@@ -59,7 +81,12 @@
 
     <div class="stepcard">
       {#if current.duration_sec}
-        <StepTimer durationSec={current.duration_sec} stepId={current.id} label={`Schritt ${index + 1}`} />
+        <!-- {#key}: Bei Schrittwechsel KOMPLETT neue Timer-Instanz.
+             Ein In-Place-Reset per $effect hat sich als fehleranfällig
+             erwiesen (Effect-Loop → eingefrorene UI). -->
+        {#key current.id}
+          <StepTimer durationSec={current.duration_sec} stepId={current.id} label={`Schritt ${index + 1}`} />
+        {/key}
       {/if}
 
       {#if stepIngredients.length}

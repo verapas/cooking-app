@@ -25,9 +25,10 @@
   // der Zustand in der sessionStorage geparkt, damit der Timer das
   // Navigieren innerhalb der App überlebt.
 
-  // Key wandert mit stepId mit (Schrittwechsel → anderer Speicherplatz);
-  // im $effect-Zweig nicht vorzeitig lesen, daher Funktion statt Konstante
-  let STORE_KEY = $derived(`step-timer:${stepId}`);
+  // Schrittwechsel zerstört die Komponente komplett ({#key current.id} im
+  // Stepper) → stepId ist pro Instanz KONSTANT, der Key kann statisch sein.
+  // svelte-ignore state_referenced_locally
+  const STORE_KEY = `step-timer:${stepId}`;
 
   interface StoredTimer {
     endAt: number; // Ziel-Zeitpunkt (epoch ms); 0 = pausiert
@@ -190,35 +191,16 @@
     clearStore();
   }
 
-  // Prop-Reset: wenn der Schritt gewechselt wird (durationSec/stepId),
-  // Zustand für den NEUEN Schritt aus der sessionStorage holen
-  // bewusst nur der Initialwert: prevStepId dient dem Schrittwechsel-Vergleich
-  // svelte-ignore state_referenced_locally
-  let prevStepId = stepId;
-  $effect(() => {
-    durationSec;
-    const old = prevStepId;
-    prevStepId = stepId;
-    // Beim Wechsel zum nächsten Schritt („Weiter") wird ein laufender
-    // Timer KOMPLETT gestoppt: Watcher abmelden + Speicher des alten
-    // Schritts löschen, damit dort kein Zombie-Timer weiterläuft.
-    // Beim Unmount bewusst NICHT — dann soll der Timer app-weit weiterlaufen.
-    if (old !== stepId) {
-      unwatchTimer(old);
-      try {
-        sessionStorage.removeItem(`step-timer:${old}`);
-      } catch {
-        /* ignorieren */
-      }
-    }
-    stopInterval();
-    endAt = null;
-    pausedRemaining = null;
-    finished = false;
-    total = durationSec;
-    now = Date.now();
-    restore();
-  });
+  // WICHTIG — kein $effect fürs Initialisieren mehr:
+  // Ein Effect, der State schreibt (endAt/total/…) und dabei Module-State
+  // berührt (restore() → watchTimer() → alarm.running), kann sich selbst
+  // invalidieren und in einer Endlosschleife landen (bis zu 500+ Läufe,
+  // die Svelte-Runtime bricht dann still oder mit effect_update_depth_
+  // exceeded → „App eingefroren"). Daher: Restore EINMALIG SYNCHRON beim
+  // Komponenten-Setup. Der Schrittwechsel erzeugt ohnehin eine frische
+  // Instanz ({#key current.id} im Stepper) — ein Prop-Beobachtungs-Effect
+  // ist damit überflüssig.
+  restore();
 
   // Beim Zurückkehren in den Tab sofort nachziehen (der Timer lief auf
   // Zielzeit weiter, nur die Anzeige war eingefroren)
