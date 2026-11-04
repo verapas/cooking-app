@@ -7,8 +7,6 @@
 </svelte:head>
 
 <main class="container settings">
-  <p class="dim">Wähle einen Bereich aus:</p>
-
   <div class="options">
     <a href="/settings/ai" class="option">
       <span class="ic ic-ai"><Icon name="sparkles" size={24} /></span>

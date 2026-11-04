@@ -23,17 +23,6 @@
         ? `KI: „${data.contextTitle}" verbessern`
         : 'Neues Rezept mit der KI planen'}
     </h1>
-    {#if data.mode === 'improve'}
-      <p class="dim small">
-        Du überschreibst das Original oder legst eine neue Version an —
-        wählbar beim Speichern.
-      </p>
-    {:else}
-      <p class="dim small">
-        Plane ein Rezept im Chat. Der Verlauf wird nicht gespeichert — nur
-        das fertige Rezept am Ende.
-      </p>
-    {/if}
   </header>
 
   {#if !data.has_key}

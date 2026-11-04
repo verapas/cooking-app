@@ -81,11 +81,6 @@
 </svelte:head>
 
 <main class="container list">
-  <p class="dim intro">
-    Rezepte, die Mitglieder dieser App veröffentlicht haben — aus allen
-    Spaces. Du kannst sie als Kopie in deinen eigenen Space übernehmen.
-  </p>
-
   <header class="page-head">
     <form class="search-inline" onsubmit={search}>
       <div class="tag-filter">

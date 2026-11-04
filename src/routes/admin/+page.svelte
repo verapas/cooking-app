@@ -199,11 +199,6 @@
   <a href="/" class="back-link"><Icon name="back" size={16} /> Alle Rezepte</a>
 
   <h1>Verwaltung</h1>
-  <p class="dim">
-    Benutzer und Spaces verwalten. Benutzerkonten entstehen beim ersten
-    Login (Keycloak) oder direkt hier; wer in welchem Space ist, bestimmst du
-    über die Mitgliedschaften.
-  </p>
 
   {#if notice}<p class="ok">{notice}</p>{/if}
   {#if errorMsg}<p class="err">{errorMsg}</p>{/if}
