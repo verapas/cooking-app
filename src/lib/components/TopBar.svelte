@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { toggleDrawer } from '$lib/nav.svelte';
-  import { alarm, silenceAlarm } from '$lib/alarm.svelte';
+  import { alarm, silenceAlarm, stopRunningTimer } from '$lib/alarm.svelte';
   import CategoryIcon from './CategoryIcon.svelte';
   import Icon from './Icon.svelte';
   import type { Category } from '$lib/types';
@@ -27,6 +27,16 @@
     // Fallback (Startseite + Seiten ohne eigenen Nav-Punkt, z. B. Rezept-Detail)
     return { label: 'Alle Rezepte', icon: 'home' };
   });
+
+  // Restzeit des laufenden Timers (der Watcher in alarm.svelte.ts tickt
+  // `alarm.now` im Halbssekundentakt, solange ein Timer läuft)
+  let runningRemaining = $derived(
+    alarm.running ? Math.max(0, Math.ceil((alarm.running.endAt - alarm.now) / 1000)) : 0
+  );
+  const runningDisplay = $derived.by(() => {
+    const s = runningRemaining;
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  });
 </script>
 
 <header class="topbar">
@@ -42,6 +52,19 @@
     <span class="logo"><CategoryIcon icon={current.icon} size={20} /></span>
     {current.label}
   </span>
+  {#if alarm.running}
+    <span class="runningtimer" title={alarm.running.label || 'Timer läuft'}>
+      <span class="rt-time"><Icon name="timer" size={14} /> {runningDisplay}</span>
+      <button
+        class="rt-stop"
+        onclick={stopRunningTimer}
+        aria-label="Timer stoppen"
+        title="Timer stoppen"
+      >
+        <Icon name="stop" size={12} filled />
+      </button>
+    </span>
+  {/if}
   {#if alarm.ringing}
     <button
       class="alarm"
@@ -112,6 +135,42 @@
     color: var(--accent);
     display: inline-flex;
     flex-shrink: 0;
+  }
+  .runningtimer {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .rt-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .rt-stop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: var(--surface);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .rt-stop:active {
+    opacity: 0.6;
   }
   .alarm {
     margin-left: auto;

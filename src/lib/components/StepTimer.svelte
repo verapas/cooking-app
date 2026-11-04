@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
-  import { playAlarm, unlockAudio, vibrate } from '$lib/sound';
+  import { unlockAudio } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
-  import { ensureNotificationPermission, notifyTimerDone } from '$lib/notify';
-  import { alarm } from '$lib/alarm.svelte';
+  import { ensureNotificationPermission } from '$lib/notify';
+  import { alarm, fireTimerDone, silenceAlarm, unwatchTimer, watchTimer } from '$lib/alarm.svelte';
   import Icon from './Icon.svelte';
 
   let {
@@ -42,8 +42,6 @@
   let finished = $state(false);
   let now = $state(Date.now());
   let intervalId: ReturnType<typeof setInterval> | null = null;
-  // Läuft der Wecker, stoppt ihn das Zurücksetzen/der Schrittwechsel
-  let stopAlarm: (() => void) | null = null;
 
   let remaining = $derived(
     endAt !== null ? Math.max(0, Math.ceil((endAt - now) / 1000)) : (pausedRemaining ?? total)
@@ -103,6 +101,8 @@
       endAt = data.endAt;
       pausedRemaining = null;
       startInterval();
+      // Wieder beim app-weiten Watcher anmelden (Neuladen der Seite etc.)
+      watchTimer(stepId, endAt, total, label ?? '');
       void requestWakeLock();
     } else {
       pausedRemaining = data.remaining > 0 ? data.remaining : null;
@@ -113,6 +113,17 @@
     now = Date.now();
     if (endAt !== null && now >= endAt) {
       finish();
+      return;
+    }
+    // Von außen gestoppt (Stopp-Button in der TopBar)? → lokal zurücksetzen
+    if (endAt !== null && (alarm.running === null || alarm.running.stepId !== stepId)) {
+      stopInterval();
+      endAt = null;
+      pausedRemaining = null;
+      finished = false;
+      total = durationSec;
+      clearStore();
+      void releaseWakeLock();
     }
   }
 
@@ -127,35 +138,16 @@
     }
   }
 
-  function stopAlarmSound(): void {
-    stopAlarm?.();
-    stopAlarm = null;
-    // Globale Anzeige (TopBar-Wecker) mit ausblenden
-    alarm.ringing = false;
-    alarm.stop = null;
-  }
-
   function finish(): void {
     endAt = null;
     pausedRemaining = 0;
     finished = true;
     stopInterval();
     releaseWakeLock();
-    stopAlarmSound();
-    stopAlarm = playAlarm();
-    vibrate([500, 200, 500, 200, 500, 200, 500]);
-    // Wecker-Symbol in der TopBar zeigen; Klick dort stoppt den Ton.
-    // playAlarm gibt nach ~30 s von selbst auf → Anzeige mit ausblenden.
-    alarm.ringing = true;
-    alarm.stop = stopAlarmSound;
-    setTimeout(() => {
-      if (alarm.stop === stopAlarmSound) stopAlarmSound();
-    }, 30500);
-    // Notification vor allem, wenn die App gerade nicht sichtbar ist —
-    // dann bringt der In-App-Bleep nichts.
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-      notifyTimerDone(label ?? '');
-    }
+    // Läutet global (Ton, Vibration, Notification, TopBar-Wecker) — aber
+    // nur, wenn nicht schon der app-weite Watcher in alarm.svelte.ts
+    // gefeuert hat (z. B. während man auf einer anderen Seite war).
+    fireTimerDone(stepId);
     persist();
     onDone?.();
   }
@@ -168,6 +160,9 @@
     endAt = now + Math.max(1, pausedRemaining ?? total) * 1000;
     pausedRemaining = null;
     startInterval();
+    // App-weit beobachten lassen: klingelt auch, wenn man von der
+    // Rezept-Seite weg navigiert (die Komponente ist dann zerstört)
+    watchTimer(stepId, endAt, total, label ?? '');
     void requestWakeLock();
     persist();
   }
@@ -176,12 +171,14 @@
     pausedRemaining = remaining;
     endAt = null;
     stopInterval();
+    unwatchTimer(stepId);
     void releaseWakeLock();
     persist();
   }
   function reset(): void {
     stopInterval();
-    stopAlarmSound();
+    silenceAlarm();
+    unwatchTimer(stepId);
     endAt = null;
     pausedRemaining = null;
     finished = false;
@@ -192,18 +189,25 @@
 
   // Prop-Reset: wenn der Schritt gewechselt wird (durationSec/stepId),
   // Zustand für den NEUEN Schritt aus der sessionStorage holen
+  // bewusst nur der Initialwert: prevStepId dient dem Schrittwechsel-Vergleich
+  // svelte-ignore state_referenced_locally
+  let prevStepId = stepId;
   $effect(() => {
     durationSec;
-    stepId;
+    const old = prevStepId;
+    prevStepId = stepId;
+    // Beim Wechsel zum nächsten Schritt: Watch des ALTEN Timers lösen
+    // (der neue meldet sich selbst über restore()/start() wieder an).
+    // Beim Unmount bewusst NICHT abmelden — der Timer soll ja app-weit
+    // weiterlaufen und läuten.
+    if (old !== stepId) unwatchTimer(old);
     stopInterval();
-    stopAlarmSound();
     endAt = null;
     pausedRemaining = null;
     finished = false;
     total = durationSec;
     now = Date.now();
     restore();
-    return () => void releaseWakeLock();
   });
 
   // Beim Zurückkehren in den Tab sofort nachziehen (der Timer lief auf
@@ -225,6 +229,8 @@
     const next = Math.max(0, cur + delta);
     if (endAt !== null) {
       endAt = now + next * 1000;
+      // Watcher über die neue Zielzeit informieren
+      watchTimer(stepId, endAt, total, label ?? '');
     } else {
       pausedRemaining = finished ? null : next;
     }
@@ -236,13 +242,13 @@
 
   onDestroy(() => {
     stopInterval();
-    stopAlarmSound();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', onVisibility);
     }
-    // Wake Lock NICHT freigeben: ein laufender Timer soll den Bildschirm
-    // auch nach dem Wegnavigieren wachhalten — freigegeben wird beim
-    // Finish/Reset bzw. vom Browser selbst beim Tab-Einfrieren.
+    // Bewusst NICHT unwatchen/auslösen: Ein laufender Timer soll auch nach
+    // dem Wegnavigieren weiterlaufen und läuten — der app-weite Watcher in
+    // alarm.svelte.ts übernimmt. Auch das Wake Lock bleibt (der Browser
+    // gibt es beim Tab-Einfrieren selbst frei).
   });
 </script>
 
@@ -253,8 +259,12 @@
       <Icon name="restart" size={18} />
     </button>
   {:else}
-    <div class="ring" aria-hidden="true">
-      <svg viewBox="0 0 100 100">
+    <div class="adjust">
+      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Minute">−1</button>
+      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Minuten">−5</button>
+    </div>
+    <div class="ring">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
         <circle class="track" cx="50" cy="50" r={R} />
         <circle
           class="prog"
@@ -263,13 +273,12 @@
           stroke-dashoffset={CIRC * (1 - progress)}
         />
       </svg>
+      <span class="ringicon"><Icon name="timer" size={18} /></span>
     </div>
     <span class="time">{display}</span>
     <div class="adjust">
-      <button class="adj" onclick={() => adjustTime(-60)} disabled={remaining < 60} aria-label="Eine Minute abziehen" title="−1 Min">−1</button>
-      <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Min">+1</button>
-      <button class="adj" onclick={() => adjustTime(-300)} disabled={remaining < 300} aria-label="Fünf Minuten abziehen" title="−5 Min">−5</button>
-      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Min">+5</button>
+      <button class="adj" onclick={() => adjustTime(300)} aria-label="Fünf Minuten hinzufügen" title="+5 Minuten">+5</button>
+      <button class="adj" onclick={() => adjustTime(60)} aria-label="Eine Minute hinzufügen" title="+1 Minute">+1</button>
     </div>
     <button
       class="ctl ctl-primary"
@@ -283,11 +292,6 @@
         <Icon name="play" size={18} filled />
       {/if}
     </button>
-    {#if remaining < total}
-      <button class="ctl" onclick={reset} aria-label="Timer zurücksetzen" title="Zurücksetzen">
-        <Icon name="restart" size={18} />
-      </button>
-    {/if}
   {/if}
 </div>
 
@@ -296,17 +300,29 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
+    gap: 8px;
+    padding: 10px 10px;
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: 16px;
   }
   .ring {
-    width: 32px;
-    height: 32px;
+    position: relative;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
+  }
+  .ringicon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+  .timer.running .ringicon {
+    color: var(--accent);
   }
   .ring svg {
     width: 100%;
@@ -344,11 +360,10 @@
   }
   .adjust {
     display: flex;
-    gap: 6px;
-    margin-left: auto;
+    gap: 5px;
   }
   .adj {
-    padding: 6px 10px;
+    padding: 6px 9px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);

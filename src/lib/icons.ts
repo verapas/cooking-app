@@ -29,6 +29,7 @@ export const icons = {
   play: '<path d="m7 4 12 8-12 8z"/>',
   pause: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
   restart: '<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 3v4h4"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   warning: '<path d="M12 3 22 20 2 20z"/><path d="M12 9v5"/><path d="M12 17.5h.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>',
   hourglass: '<path d="M6 3h12"/><path d="M6 21h12"/><path d="M6 3c0 4 3.5 5 6 7 2.5-2 6-3 6-7"/><path d="M6 21c0-4 3.5-5 6-7 2.5 2 6 3 6 7"/>',
