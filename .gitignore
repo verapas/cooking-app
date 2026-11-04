@@ -41,3 +41,5 @@ data/
 # compose.yaml (mit echten Secrets) ignorieren wir aber:
 deploy/compose.yaml
 deploy/.env
+docs-private/
+INFRA.md
