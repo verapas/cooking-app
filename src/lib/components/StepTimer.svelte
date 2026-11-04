@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
-  import { playBeep, unlockAudio, vibrate } from '$lib/sound';
+  import { playAlarm, unlockAudio, vibrate } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
   import { ensureNotificationPermission, notifyTimerDone } from '$lib/notify';
   import Icon from './Icon.svelte';
@@ -41,6 +41,8 @@
   let finished = $state(false);
   let now = $state(Date.now());
   let intervalId: ReturnType<typeof setInterval> | null = null;
+  // Läuft der Wecker, stoppt ihn das Zurücksetzen/der Schrittwechsel
+  let stopAlarm: (() => void) | null = null;
 
   let remaining = $derived(
     endAt !== null ? Math.max(0, Math.ceil((endAt - now) / 1000)) : (pausedRemaining ?? total)
@@ -124,14 +126,20 @@
     }
   }
 
+  function stopAlarmSound(): void {
+    stopAlarm?.();
+    stopAlarm = null;
+  }
+
   function finish(): void {
     endAt = null;
     pausedRemaining = 0;
     finished = true;
     stopInterval();
     releaseWakeLock();
-    playBeep();
-    vibrate([400, 150, 400]);
+    stopAlarmSound();
+    stopAlarm = playAlarm();
+    vibrate([500, 200, 500, 200, 500, 200, 500]);
     // Notification vor allem, wenn die App gerade nicht sichtbar ist —
     // dann bringt der In-App-Bleep nichts.
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
@@ -162,6 +170,7 @@
   }
   function reset(): void {
     stopInterval();
+    stopAlarmSound();
     endAt = null;
     pausedRemaining = null;
     finished = false;
@@ -176,6 +185,7 @@
     durationSec;
     stepId;
     stopInterval();
+    stopAlarmSound();
     endAt = null;
     pausedRemaining = null;
     finished = false;
@@ -215,6 +225,7 @@
 
   onDestroy(() => {
     stopInterval();
+    stopAlarmSound();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', onVisibility);
     }
