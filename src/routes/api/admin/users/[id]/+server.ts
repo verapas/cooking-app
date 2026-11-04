@@ -5,6 +5,7 @@ import {
   deleteUser,
   getUserBrief,
   getUserRow,
+  isProtectedUser,
   requireAdmin,
   setActiveSpace,
   setUserAdmin,
@@ -41,6 +42,13 @@ export const PUT: RequestHandler = async ({ locals, params, request }) => {
     if (typeof body.is_admin !== 'boolean') throw error(422, '"is_admin" muss boolean sein');
     if (id === me.id && body.is_admin === false) {
       throw error(422, 'Der eigene Admin-Status kann nicht entfernt werden');
+    }
+    // Geschützte Konten (PROTECTED_USERS) dürfen nicht degradiert werden
+    if (body.is_admin === false) {
+      const brief = await getUserBrief(id);
+      if (brief && isProtectedUser(id, brief.username)) {
+        throw error(422, 'Dieses Konto ist geschützt und verliert seine Admin-Rechte nicht');
+      }
     }
     // Guardrail „letzter Admin": Beim Entziehen prüfen, ob das Ziel
     // überhaupt Admin ist und danach noch mindestens einer übrig bliebe.
@@ -82,6 +90,11 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 
   const user = await getUserBrief(id);
   if (!user) throw error(404, 'Benutzer nicht gefunden');
+  // Geschützte Konten (PROTECTED_USERS) dürfen nie gelöscht werden —
+  // z. B. der Betreiber der Keycloak-/Server-Infrastruktur.
+  if (isProtectedUser(id, user.username)) {
+    throw error(422, 'Dieses Konto ist geschützt und kann nicht gelöscht werden');
+  }
 
   if (keycloakAdminConfigured()) {
     try {

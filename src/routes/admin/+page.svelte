@@ -323,6 +323,7 @@
             <span class="user-name">
               {displayName(u)}
               {#if u.is_admin}<span class="badge badge-admin">Admin</span>{/if}
+              {#if u.is_protected}<span class="badge badge-protected" title="Konto ist über PROTECTED_USERS geschützt — kann nicht gelöscht oder degradiert werden">geschützt</span>{/if}
             </span>
             <span class="user-meta">
               {#if u.username && u.username !== displayName(u)}@{u.username} · {/if}
@@ -360,6 +361,17 @@
                 <Icon name="lock" size={15} />
                 Admin (eigener Account)
               </button>
+            {:else if u.is_protected}
+              <!-- Geschütztes Konto (PROTECTED_USERS): kein Degradieren. -->
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled
+                title="Dieses Konto ist geschützt und verliert seine Admin-Rechte nicht"
+              >
+                <Icon name="lock" size={15} />
+                Admin (geschützt)
+              </button>
             {:else}
               <button
                 type="button"
@@ -372,7 +384,7 @@
                 {u.is_admin ? 'Admin entfernen' : 'Admin'}
               </button>
             {/if}
-            {#if u.id !== data.me.id}
+            {#if u.id !== data.me.id && !u.is_protected}
               <button
                 type="button"
                 class="btn btn-danger"
@@ -607,6 +619,10 @@
     color: var(--text-dim);
     font-size: 0.72rem;
     font-weight: 600;
+  }
+  .badge-protected {
+    background: color-mix(in srgb, var(--success) 18%, transparent);
+    color: var(--success);
   }
   .badge-admin {
     background: rgba(255, 122, 61, 0.18);

@@ -274,7 +274,10 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
   `IMAGES_DIR` (default `./data/images`), `ORIGIN` (z. B. `https://recipes.lkit.ch`
   — Basis der OIDC-Redirect-URI), `OIDC_ISSUER` (z. B.
   `https://auth.lkit.ch/realms/master`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
-  `SESSION_TTL_DAYS` (default `30`). `$env/dynamic/private` liest sie zur Runtime.
+  `SESSION_TTL_DAYS` (default `30`), `PROTECTED_USERS` (optional, Komma-Liste
+  von Usernames/IDs — Konten können in /admin nicht gelöscht oder degradiert
+  werden; schützt z. B. den Infra-Betreiber, siehe admin.ts `isProtectedUser`).
+  `$env/dynamic/private` liest sie zur Runtime.
 - **`Date.now()` / `Math.random()`** sind nur in Workflow-Skripten gesperrt — im
   normalen App-Code (server- wie client-seitig) frei nutzbar.
 

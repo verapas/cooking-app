@@ -27,6 +27,8 @@ export interface AdminUser {
   email: string | null;
   name: string | null;
   is_admin: boolean;
+  /** Konto ist über PROTECTED_USERS unantastbar (kein Löschen/Degradieren). */
+  is_protected: boolean;
   active_space_id: number | null;
   last_login_at: string | null;
   created_at: string;

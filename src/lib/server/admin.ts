@@ -20,6 +20,27 @@ export function requireAdmin(locals: App.Locals): SessionUser {
 }
 
 // =====================================================================
+// Geschützte Konten (PROTECTED_USERS)
+// =====================================================================
+// Kommagetrennte Liste von Benutzernamen ODER numerischen IDs, deren
+// Konten nicht gelöscht und nicht degradiert werden dürfen — z. B. der
+// Betreiber der Keycloak-/Server-Infrastruktur. Wird zur Runtime aus der
+// Env gelesen, ein App-Neustart nach Änderung genügt.
+// Beispiel: PROTECTED_USERS=luca,7
+
+/** true, wenn dieses Konto in PROTECTED_USERS steht. */
+export function isProtectedUser(id: number, username: string | null): boolean {
+  const raw = env.PROTECTED_USERS ?? '';
+  for (const entry of raw.split(',')) {
+    const t = entry.trim().toLowerCase();
+    if (!t) continue;
+    if (t === String(id)) return true;
+    if (username && t === username.toLowerCase()) return true;
+  }
+  return false;
+}
+
+// =====================================================================
 // Listen (für /admin)
 // =====================================================================
 
@@ -56,6 +77,7 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
     email: u.email,
     name: u.name,
     is_admin: Boolean(u.is_admin),
+    is_protected: isProtectedUser(Number(u.id), u.username),
     active_space_id: u.active_space_id != null ? Number(u.active_space_id) : null,
     last_login_at: u.last_login_at != null ? toISOString(u.last_login_at) : null,
     created_at: toISOString(u.created_at) ?? '',
