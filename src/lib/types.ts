@@ -11,15 +11,13 @@ export interface SessionUser {
   is_admin: boolean;
 }
 
-/** Rolle eines Benutzers in einem Space. */
-export type SpaceRole = 'owner' | 'member';
-
 /** Der aktive Space des Benutzers — Scope für alle Daten-Queries
- *  (hooks.server.ts löst ihn auf und legt ihn in locals.space ab). */
+ *  (hooks.server.ts löst ihn auf und legt ihn in locals.space ab).
+ *  Keine Rollen mehr: Rechte innerhalb eines Spaces hängen allein an
+ *  der Mitgliedschaft (V13 hat space_members.role entfernt). */
 export interface ActiveSpace {
   id: number;
   name: string;
-  role: SpaceRole;
 }
 
 /** Benutzer mit Mitgliedschaften — Datenlage für /admin. */
@@ -32,7 +30,7 @@ export interface AdminUser {
   active_space_id: number | null;
   last_login_at: string | null;
   created_at: string;
-  memberships: { space_id: number; space_name: string; role: SpaceRole }[];
+  memberships: { space_id: number; space_name: string }[];
 }
 
 /** Space mit Mitgliedern und Rezept-Zähler — Datenlage für /admin. */
@@ -45,7 +43,6 @@ export interface AdminSpace {
     user_id: number;
     username: string | null;
     name: string | null;
-    role: SpaceRole;
     /** true, wenn dieser Space gerade der aktive Space des Mitglieds ist. */
     is_active_space: boolean;
   }[];

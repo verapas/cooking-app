@@ -967,6 +967,31 @@ export async function getPublishedRecipe(id: number): Promise<PublishedRecipe | 
   } as unknown as PublishedRecipe;
 }
 
+/** Veröffentlichte Versionen einer Rezept-Familie für die öffentliche
+ *  Detailseite: Hauptrezept + Varianten, aber NUR Familien-Mitglieder
+ *  mit is_published = 1 — unveröffentlichte Varianten bleiben privat
+ *  (und würden beim Umschalten sonst 404 liefern). `recipeId` darf die
+ *  Haupt- ODER eine Varianten-ID sein; die Familie wird über
+ *  parent_recipe_id aufgelöst. */
+export async function getPublishedVersions(recipeId: number): Promise<RecipeVersion[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT fam.id, fam.version_name,
+            COALESCE(r.parent_recipe_id, r.id) AS main_id
+     FROM recipes fam
+     JOIN recipes r ON r.id = ?
+     WHERE fam.is_published = 1
+       AND (fam.id = COALESCE(r.parent_recipe_id, r.id)
+            OR fam.parent_recipe_id = COALESCE(r.parent_recipe_id, r.id))
+     ORDER BY fam.id ASC`,
+    [recipeId]
+  );
+  return rows.map((row) => ({
+    id: Number(row.id),
+    version_name: (row.version_name as string | null) ?? null,
+    is_main: Number(row.id) === Number(row.main_id)
+  }));
+}
+
 /** Veröffentlichen/Zurückziehen — nur im eigenen Space (IDOR-Schutz). */
 export async function togglePublish(spaceId: number, id: number): Promise<boolean | null> {
   const [rows] = await pool.query<RowDataPacket[]>(

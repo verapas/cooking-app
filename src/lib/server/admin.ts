@@ -9,7 +9,7 @@
 import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { pool, toISOString, type RowDataPacket, type ResultSetHeader } from './db';
-import type { AdminSpace, AdminUser, SessionUser, SpaceRole } from '$lib/types';
+import type { AdminSpace, AdminUser, SessionUser } from '$lib/types';
 
 /** Wirft 403, wenn der eingeloggte Benutzer kein App-Admin ist. */
 export function requireAdmin(locals: App.Locals): SessionUser {
@@ -40,14 +40,14 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
     'SELECT id, username, email, name, is_admin, active_space_id, last_login_at, created_at FROM users ORDER BY created_at ASC, id ASC'
   );
   const [memberships] = await pool.query<RowDataPacket[]>(
-    `SELECT sm.user_id, sm.space_id, sm.role, s.name AS space_name
+    `SELECT sm.user_id, sm.space_id, s.name AS space_name
      FROM space_members sm JOIN spaces s ON s.id = sm.space_id
      ORDER BY s.name ASC`
   );
   const byUser = new Map<number, AdminUser['memberships']>();
-  for (const m of memberships as { user_id: number; space_id: number; role: SpaceRole; space_name: string }[]) {
+  for (const m of memberships as { user_id: number; space_id: number; space_name: string }[]) {
     const list = byUser.get(m.user_id) ?? [];
-    list.push({ space_id: m.space_id, space_name: m.space_name, role: m.role });
+    list.push({ space_id: m.space_id, space_name: m.space_name });
     byUser.set(m.user_id, list);
   }
   return users.map((u) => ({
@@ -78,7 +78,7 @@ export async function listAdminSpaces(): Promise<AdminSpace[]> {
      FROM spaces s ORDER BY s.id ASC`
   );
   const [members] = await pool.query<RowDataPacket[]>(
-    `SELECT sm.space_id, sm.user_id, sm.role, sm.joined_at,
+    `SELECT sm.space_id, sm.user_id, sm.joined_at,
             u.username, u.name, u.active_space_id
      FROM space_members sm JOIN users u ON u.id = sm.user_id
      ORDER BY sm.joined_at ASC, u.id ASC`
@@ -87,7 +87,6 @@ export async function listAdminSpaces(): Promise<AdminSpace[]> {
   for (const m of members as {
     space_id: number;
     user_id: number;
-    role: SpaceRole;
     username: string | null;
     name: string | null;
     active_space_id: number | null;
@@ -97,7 +96,6 @@ export async function listAdminSpaces(): Promise<AdminSpace[]> {
       user_id: m.user_id,
       username: m.username,
       name: m.name,
-      role: m.role,
       is_active_space: m.active_space_id === m.space_id
     });
     bySpace.set(m.space_id, list);
@@ -175,12 +173,11 @@ export async function deleteSpace(id: number): Promise<boolean> {
 // Mitgliedschaften
 // =====================================================================
 
-/** Mitglied hinzufügen (oder Rolle aktualisieren, falls schon Mitglied). */
-export async function addMember(spaceId: number, userId: number, role: SpaceRole): Promise<void> {
+/** Mitglied hinzufügen (idempotent — doppelte Inserts sind No-Ops). */
+export async function addMember(spaceId: number, userId: number): Promise<void> {
   await pool.execute(
-    `INSERT INTO space_members (space_id, user_id, role) VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE role = VALUES(role)`,
-    [spaceId, userId, role]
+    'INSERT IGNORE INTO space_members (space_id, user_id) VALUES (?, ?)',
+    [spaceId, userId]
   );
 }
 
@@ -189,14 +186,6 @@ export async function removeMember(spaceId: number, userId: number): Promise<boo
   const [result] = await pool.execute<ResultSetHeader>(
     'DELETE FROM space_members WHERE space_id = ? AND user_id = ?',
     [spaceId, userId]
-  );
-  return result.affectedRows > 0;
-}
-
-export async function setMemberRole(spaceId: number, userId: number, role: SpaceRole): Promise<boolean> {
-  const [result] = await pool.execute<ResultSetHeader>(
-    'UPDATE space_members SET role = ? WHERE space_id = ? AND user_id = ?',
-    [role, spaceId, userId]
   );
   return result.affectedRows > 0;
 }

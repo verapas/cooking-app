@@ -104,6 +104,11 @@ services:
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-koch-app}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      # Optional: Service-Account für Benutzer-Erstellung in der App
+      # (Keycloak-Client mit service account + manage-users, s. INFRA.md).
+      # Ohne beide Keys bleibt die Funktion deaktiviert.
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
       # Session-Dauer in Tagen (rolling — verlängert sich bei Nutzung).
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
     logging:

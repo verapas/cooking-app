@@ -15,7 +15,7 @@
 // users.active_space_id nebenbei.
 
 import { pool, type RowDataPacket, type ResultSetHeader } from './db';
-import type { ActiveSpace, SpaceRole } from '$lib/types';
+import type { ActiveSpace } from '$lib/types';
 
 /**
  * Space-ID aus locals (für Load-Funktionen und API-Routen). Der Hook
@@ -39,9 +39,9 @@ const DEFAULT_CATEGORIES: { name: string; slug: string; icon: string; sort_order
 ];
 
 /**
- * Legt einen persönlichen Space für den Benutzer an: Space + owner-
- * Membership + Standard-Kategorien, atomar. Name ist am Anzeigenamen
- * orientiert ("Pascals Rezepte"); umbenennbar (Phase 2 / SQL).
+ * Legt einen persönlichen Space für den Benutzer an: Space + Membership
+ * + Standard-Kategorien, atomar. Name ist am Anzeigenamen orientiert
+ * ("Pascals Rezepte"); umbenennbar (Phase 2 / SQL).
  */
 export async function createPersonalSpace(
   userId: number,
@@ -58,8 +58,8 @@ export async function createPersonalSpace(
     );
     const spaceId = result.insertId;
     await conn.execute(
-      'INSERT INTO space_members (space_id, user_id, role) VALUES (?, ?, ?)',
-      [spaceId, userId, 'owner']
+      'INSERT INTO space_members (space_id, user_id) VALUES (?, ?)',
+      [spaceId, userId]
     );
     for (const c of DEFAULT_CATEGORIES) {
       await conn.execute(
@@ -68,7 +68,7 @@ export async function createPersonalSpace(
       );
     }
     await conn.commit();
-    return { id: spaceId, name, role: 'owner' };
+    return { id: spaceId, name };
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -90,7 +90,7 @@ export async function resolveActiveSpace(
   displayName: string
 ): Promise<ActiveSpace> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT s.id, s.name, sm.role
+    `SELECT s.id, s.name
      FROM users u
      JOIN space_members sm ON sm.user_id = u.id
      JOIN spaces s ON s.id = sm.space_id
@@ -105,8 +105,7 @@ export async function resolveActiveSpace(
     const row = rows[0];
     space = {
       id: Number(row.id),
-      name: row.name as string,
-      role: (row.role as SpaceRole) ?? 'member'
+      name: row.name as string
     };
   } else {
     space = await createPersonalSpace(userId, displayName);

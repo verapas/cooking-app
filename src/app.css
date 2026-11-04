@@ -252,3 +252,61 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* === SweetAlert2-Dialoge im App-Design ===
+   Grund-Colors kommen per swalFire()-Defaults (swal.ts); hier folgen
+   die Details, die SweetAlert2 nur per CSS erreichen lässt: Border,
+   Radius, Schrift, Input-Felder und Button-Formen. */
+.swal2-popup.koch-swal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.koch-swal .swal2-title {
+  color: var(--text);
+  font-size: 1.25rem;
+}
+.koch-swal .swal2-html-container,
+.koch-swal .swal2-validation-message {
+  color: var(--text-dim);
+}
+/* Buttons wie .btn: rundere Ecken, kein Uppercase */
+.koch-swal .swal2-styled.swal2-confirm,
+.koch-swal .swal2-styled.swal2-cancel {
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  box-shadow: none;
+  min-height: 44px;
+  padding: 0 18px;
+}
+.koch-swal .swal2-styled.swal2-cancel {
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+/* Text-Input (z. B. Space umbenennen) wie .search-inline input */
+.koch-swal .swal2-input {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  margin-bottom: 4px;
+}
+.koch-swal .swal2-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+/* Icon-Farben an Status-Variablen angleichen */
+.koch-swal .swal2-icon.swal2-warning {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.koch-swal .swal2-icon.swal2-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.koch-swal .swal2-icon.swal2-success {
+  border-color: var(--success);
+  color: var(--success);
+}

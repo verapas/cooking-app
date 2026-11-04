@@ -8,7 +8,6 @@ import {
   userExists
 } from '$lib/server/admin';
 import { createKeycloakUser, keycloakAdminConfigured, KeycloakAdminError } from '$lib/server/keycloakAdmin';
-import type { SpaceRole } from '$lib/types';
 
 // POST /api/admin/users — Benutzer anlegen (nur App-Admins).
 //
@@ -22,8 +21,7 @@ import type { SpaceRole } from '$lib/types';
 //     "email": "…",                  optional
 //     "name": "Vor Nach",            optional (Anzeigename)
 //     "password": "geheim123",       Pflicht (temporary=true →Änderung beim 1. Login)
-//     "space_id": 1,                 optional — direkt in einen Space schubsen
-//     "role": "member" }             optional (member|owner, default member)
+//     "space_id": 1 }                optional — direkt in einen Space schubsen
 export const POST: RequestHandler = async ({ locals, request }) => {
   requireAdmin(locals);
   if (!keycloakAdminConfigured()) {
@@ -36,7 +34,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     name?: unknown;
     password?: unknown;
     space_id?: unknown;
-    role?: unknown;
   };
   try {
     body = await request.json();
@@ -49,7 +46,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   const password = typeof body.password === 'string' ? body.password : '';
   const spaceId = typeof body.space_id === 'number' ? body.space_id : null;
-  const role: SpaceRole = body.role === 'owner' ? 'owner' : 'member';
 
   if (!username) throw error(422, 'Feld "username" fehlt oder ist leer.');
   if (password.length < 6) throw error(422, 'Passwort muss mindestens 6 Zeichen haben.');
@@ -70,7 +66,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     });
     const userId = await insertLocalUser(sub, { username, email, name });
     if (spaceId != null) {
-      await addMember(spaceId, userId, role);
+      await addMember(spaceId, userId);
     }
     return json({ id: userId, sub }, { status: 201 });
   } catch (err) {

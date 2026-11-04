@@ -76,7 +76,7 @@ src/routes/            # SvelteKit-Routing (+layout, +page, api/, images/, offli
   /admin/              # Verwaltung (nur users.is_admin): Benutzerliste,
                        # Benutzer erstellen (via Keycloak-Admin-API, siehe
                        # keycloakAdmin.ts), Spaces anlegen/umbenennen/
-                       # löschen (mit Content), Mitgliedschaften + Rollen,
+                       # löschen (mit Content), Mitgliedschaften,
                        # aktiven Space setzen, is_admin schalten
   /public/             # „Öffentlich"-Bereich (Phase 3): veröffentlichte
                        # Rezepte aller Spaces (Attribution: Vorname bei
@@ -181,7 +181,8 @@ vite.config.ts         # Vite + PWA-Konfiguration
   userId). V12-Backfill: Jedes Mitglied eines Spaces hat die bisherigen
   Space-Werte als eigene Kopie erhalten.
 - **Spaces** (V10): `spaces` (id, name) + `space_members` (space_id, user_id,
-  role ENUM owner|member, PK (space_id,user_id), CASCADE auf beide Seiten).
+  PK (space_id,user_id), CASCADE auf beide Seiten; keine Rollen mehr — V13
+  hat space_members.role entfernt, Rechte hängen allein an der Mitgliedschaft).
   `users.active_space_id` (FK, SET NULL) sagt, welcher Space aktiv ist;
   `users.is_admin` (App-Admin für Phase 2 Benutzerverwaltung; V10-Backfill
   setzt den frühesten User auf Admin). `categories`, `tags`, `kitchen_tools`
@@ -193,7 +194,7 @@ vite.config.ts         # Vite + PWA-Konfiguration
   des Space-Contents.
   `recipes` zusätzlich: `is_published`/`published_at` (Phase 3 „Öffentlich")
   und `created_by` (FK users, SET NULL). Backfill: Space „Familie" (id 1)
-  erhält alle Altdaten, alle bisherigen Users werden owner.
+  erhält alle Altdaten.
 
 ## Bild-Upload
 
@@ -327,7 +328,7 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 
 ### Admin (nur `users.is_admin`, Phase 2)
 - `POST /api/admin/users` - Benutzer anlegen (Keycloak-Admin-API + lokale
-  users-Zeile + optional Membership; Body `{ username, email?, name?, password, space_id?, role? }`)
+  users-Zeile + optional Membership; Body `{ username, email?, name?, password, space_id? }`)
 - `PUT /api/admin/users/[id]` - `{ is_admin? }` schalten (Self-Demote → 422)
   und/oder `{ active_space_id }` setzen (Membership nötig)
 - `POST /api/admin/spaces` - Space anlegen (`{ name }`)
@@ -335,8 +336,7 @@ pnpm docker:dev     # beim nächsten Start ist die DB leer (V1–V4 migrieren),
 - `DELETE /api/admin/spaces/[id]` - Space **mit Content** löschen (Rezepte,
   Kategorien, Tags, Utensilien; Mitglieder fallen per CASCADE — KI-Settings
   bleiben, da nutzerspezifisch)
-- `POST /api/admin/spaces/[id]/members` - Mitglied hinzufügen (`{ user_id, role }`)
-- `PUT /api/admin/spaces/[id]/members/[userId]` - Rolle ändern (`{ role }`)
+- `POST /api/admin/spaces/[id]/members` - Mitglied hinzufügen (`{ user_id }`, idempotent)
 - `DELETE /api/admin/spaces/[id]/members/[userId]` - Mitglied entfernen
   (Konto bleibt; betroffene User fallen automatisch auf ihren nächsten
   Space zurück bzw. bekommen einen persönlichen provisioniert)

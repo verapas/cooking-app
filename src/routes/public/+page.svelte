@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { invalidateAll } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import Icon from '$lib/components/Icon.svelte';
   import RecipeCard from '$lib/components/RecipeCard.svelte';
   import type { PageData } from './$types';
@@ -36,8 +36,10 @@
     if (selectedTagNames.length > 0) params.set('tags', selectedTagNames.join(','));
     if (selectedCategory) params.set('category', selectedCategory);
     const url = params.toString() ? `/public?${params}` : '/public';
-    history.pushState({}, '', url);
-    void invalidateAll();
+    // goto statt rohem history.pushState: SvelteKit sieht die URL-Änderung
+    // sonst nicht und invalidateAll() würde den Load mit der ALTEN URL
+    // (und damit ohne Filter) neu ausführen.
+    void goto(url, { keepFocus: true, noScroll: true });
   }
 
   function search(e: Event) {

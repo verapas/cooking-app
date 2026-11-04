@@ -1,10 +1,9 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
-  import Swal from 'sweetalert2';
+  import { swalFire } from '$lib/swal';
   import { handleUnauthorized, readJson } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import type { PageData } from './$types';
-  import type { SpaceRole } from '$lib/types';
 
   let { data }: { data: PageData } = $props();
 
@@ -19,7 +18,6 @@
   let newName = $state('');
   let newPassword = $state('');
   let newSpaceId = $state<number | 0>(0); // 0 = kein Space (persönlicher Space beim ersten Login)
-  let newRole = $state<SpaceRole>('member');
 
   function displayName(u: {
     name?: string | null;
@@ -78,8 +76,7 @@
         email: newEmail.trim() || undefined,
         name: newName.trim() || undefined,
         password: newPassword,
-        space_id: newSpaceId || undefined,
-        role: newRole
+        space_id: newSpaceId || undefined
       }),
       `Benutzer „${username}“ angelegt — Passwort muss beim ersten Login geändert werden.`
     );
@@ -89,7 +86,6 @@
       newName = '';
       newPassword = '';
       newSpaceId = 0;
-      newRole = 'member';
       showCreate = false;
     }
   }
@@ -118,23 +114,22 @@
   }
 
   async function renameSpace(spaceId: number, current: string) {
-    const { value: name } = await Swal.fire({
+    const { value: name } = await swalFire({
       title: 'Space umbenennen',
       input: 'text',
       inputValue: current,
       showCancelButton: true,
       confirmButtonText: 'Umbenennen',
-      cancelButtonText: 'Abbrechen',
-      confirmButtonColor: 'var(--accent)'
+      cancelButtonText: 'Abbrechen'
     });
     if (!name || name.trim() === current || !name.trim()) return;
     await api(`/api/admin/spaces/${spaceId}`, jsonInit('PUT', { name: name.trim() }), 'Space umbenannt.');
   }
 
   async function deleteSpace(spaceId: number, name: string, recipes: number) {
-    const confirmed = await Swal.fire({
+    const confirmed = await swalFire({
       title: `Space „${name}“ löschen?`,
-      html: `Das löscht <b>alle ${recipes} Rezepte</b> dieses Spaces inklusive Schritten, Zutaten, Kategorien, Tags und KI-Einstellungen. Mitglieder verlieren den Zugriff (ihre Konten bleiben).`,
+      html: `Das löscht <b>alle ${recipes} Rezepte</b> dieses Spaces inklusive Schritten, Zutaten, Kategorien, Tags und Utensilien. Mitglieder verlieren den Zugriff (ihre Konten und KI-Einstellungen bleiben).`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Endgültig löschen',
@@ -148,19 +143,17 @@
   async function addMember(spaceId: number, e: Event) {
     const form = e.currentTarget as HTMLFormElement;
     const userPick = form.querySelector<HTMLSelectElement>('select.user-pick');
-    const rolePick = form.querySelector<HTMLSelectElement>('select.role-pick');
     const userId = Number(userPick?.value ?? 0);
-    const role = (rolePick?.value ?? 'member') as SpaceRole;
     if (!userId) return;
     const ok = await api(
       `/api/admin/spaces/${spaceId}/members`,
-      jsonInit('POST', { user_id: userId, role })
+      jsonInit('POST', { user_id: userId })
     );
     if (ok) form.reset();
   }
 
   async function removeMember(spaceId: number, userId: number, label: string, spaceName: string) {
-    const confirmed = await Swal.fire({
+    const confirmed = await swalFire({
       title: `„${label}“ aus „${spaceName}“ entfernen?`,
       text: 'Das Konto bleibt bestehen — nur der Zugriff auf diesen Space wird entzogen.',
       showCancelButton: true,
@@ -170,10 +163,6 @@
     });
     if (!confirmed.isConfirmed) return;
     await api(`/api/admin/spaces/${spaceId}/members/${userId}`, { method: 'DELETE' }, 'Mitglied entfernt.');
-  }
-
-  async function changeRole(spaceId: number, userId: number, role: SpaceRole) {
-    await api(`/api/admin/spaces/${spaceId}/members/${userId}`, jsonInit('PUT', { role }));
   }
 
   // Benutzer, die noch in keinem bestimmten Space sind — für den Add-Select
@@ -212,7 +201,7 @@
         <div class="space-head">
           <div>
             <span class="space-name">{space.name}</span>
-            <span class="space-meta">{space.recipe_count} Rezepte · {space.members.length} Mitglieder</span>
+            <span class="space-meta">{space.recipe_count} Rezepte · {space.members.length} {space.members.length === 1 ? 'Mitglied' : 'Mitglieder'}</span>
           </div>
           <div class="space-actions">
             <button type="button" class="btn btn-ghost" disabled={busy} onclick={() => renameSpace(space.id, space.name)}>
@@ -230,19 +219,8 @@
               <span class="member-name">
                 {displayName(m)}
                 {#if m.is_active_space}<span class="badge badge-active" title="Aktiver Space dieses Benutzers">aktiv</span>{/if}
-                {#if m.role === 'owner'}<span class="badge">owner</span>{/if}
               </span>
               <span class="member-actions">
-                <select
-                  class="role-select"
-                  value={m.role}
-                  onchange={(e) => changeRole(space.id, m.user_id, (e.currentTarget as HTMLSelectElement).value as SpaceRole)}
-                  disabled={busy}
-                  aria-label={`Rolle von ${displayName(m)}`}
-                >
-                  <option value="member">member</option>
-                  <option value="owner">owner</option>
-                </select>
                 <button
                   type="button"
                   class="btn-remove"
@@ -267,10 +245,6 @@
                 <option value={u.id}>{displayName(u)}{u.email ? ` (${u.email})` : ''}</option>
               {/if}
             {/each}
-          </select>
-          <select class="role-pick" aria-label="Rolle" disabled={busy}>
-            <option value="member">member</option>
-            <option value="owner">owner</option>
           </select>
           <button type="submit" class="btn" disabled={busy || anyUser.filter((u) => !space.members.some((m) => m.user_id === u.id)).length === 0}>
             Hinzufügen
@@ -299,13 +273,6 @@
                 {#each data.spaces as s (s.id)}
                   <option value={s.id}>{s.name}</option>
                 {/each}
-              </select>
-            </label>
-            <label>
-              Rolle
-              <select bind:value={newRole}>
-                <option value="member">member</option>
-                <option value="owner">owner</option>
               </select>
             </label>
           </div>
@@ -356,7 +323,7 @@
                   disabled={busy || u.active_space_id === ms.space_id}
                   onclick={() => setActiveSpace(u.id, ms.space_id)}
                 >
-                  {ms.space_name}<span class="chip-role">{ms.role}</span>
+                  {ms.space_name}
                 </button>
               {/each}
               {#if u.memberships.length === 0}
@@ -555,15 +522,6 @@
     gap: 6px;
     flex-shrink: 0;
   }
-  .role-select {
-    min-height: 36px;
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 0.85rem;
-  }
   .btn-remove {
     display: inline-flex;
     align-items: center;
@@ -596,9 +554,6 @@
     background: var(--surface);
     color: var(--text);
     font-size: 0.9rem;
-  }
-  .add-member .role-pick {
-    flex: 0 0 100px;
   }
 
   /* Badges & Chips */
@@ -639,10 +594,6 @@
   .chip-space:disabled {
     cursor: default;
     opacity: 0.9;
-  }
-  .chip-role {
-    color: var(--dim);
-    font-size: 0.7rem;
   }
 
   /* Users */

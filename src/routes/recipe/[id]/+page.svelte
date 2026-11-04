@@ -6,7 +6,7 @@
   import IngredientList from '$lib/components/IngredientList.svelte';
   import Stepper from '$lib/components/Stepper.svelte';
   import { formatDuration, formatIngredient, scaleFactor } from '$lib/portion';
-  import Swal from 'sweetalert2';
+  import { swalFire } from '$lib/swal';
   import Icon from '$lib/components/Icon.svelte';
 
   let { data }: { data: PageData } = $props();
@@ -74,13 +74,11 @@
       if (res.ok) {
         isPublished = Boolean(data.is_published);
       } else {
-        await Swal.fire({
+        await swalFire({
           title: 'Fehler!',
           text: data.error || 'Veröffentlichungs-Status konnte nicht geändert werden.',
           icon: 'error',
-          background: '#1f1a14',
-          color: '#f5ede2',
-          confirmButtonColor: '#ff5c5c'
+          confirmButtonColor: 'var(--danger)'
         });
       }
     } catch {
@@ -126,20 +124,17 @@
 
     if (hasVersions && !onMain) {
       // Variante offen: nur diese Version ODER die ganze Familie löschen
-      const result = await Swal.fire({
+      const result = await swalFire({
         title: 'Version löschen?',
         html: `Du löschst die Variante <strong>„${recipe.version_name ?? 'Variante'}“</strong>.<br>Das Hauptrezept „${recipe.title}“ bleibt dabei erhalten.`,
         icon: 'warning',
         showCancelButton: true,
         showDenyButton: true,
-        confirmButtonColor: '#ff5c5c',
+        confirmButtonColor: 'var(--danger)',
         denyButtonColor: '#e8652a',
-        cancelButtonColor: '#3a3024',
         confirmButtonText: 'Nur diese Version',
         denyButtonText: 'Alles löschen',
         cancelButtonText: 'Abbrechen',
-        background: '#1f1a14',
-        color: '#f5ede2'
       });
       if (result.isConfirmed) {
         await doDelete(recipe.id, 'version', `/recipe/${mainId}`);
@@ -151,34 +146,28 @@
 
     if (hasVersions && onMain) {
       // Hauptversion trägt alle Varianten (DB-Cascade) → nur alles löschen
-      const result = await Swal.fire({
+      const result = await swalFire({
         title: 'Alle Versionen löschen?',
         html: `„<strong>${recipe.title}</strong>“ hat Varianten. Das Löschen der Hauptversion entfernt das komplette Rezept inklusive aller Varianten — auch einzeln nicht möglich.`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ff5c5c',
-        cancelButtonColor: '#3a3024',
+        confirmButtonColor: 'var(--danger)',
         confirmButtonText: 'Alles löschen',
         cancelButtonText: 'Abbrechen',
-        background: '#1f1a14',
-        color: '#f5ede2'
       });
       if (result.isConfirmed) await doDelete(recipe.id, 'all', '/');
       return;
     }
 
     // Rezept ohne Varianten: normaler Lösch-Dialog
-    const result = await Swal.fire({
+    const result = await swalFire({
       title: 'Rezept löschen?',
       text: `Möchtest du "${recipe.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ff5c5c',
-      cancelButtonColor: '#3a3024',
+      confirmButtonColor: 'var(--danger)',
       confirmButtonText: 'Ja, löschen',
       cancelButtonText: 'Abbrechen',
-      background: '#1f1a14',
-      color: '#f5ede2'
     });
     if (result.isConfirmed) await doDelete(recipe.id, 'version', '/');
   }
@@ -193,33 +182,27 @@
 
       if (handleUnauthorized(res)) return;
       if (res.ok) {
-        await Swal.fire({
+        await swalFire({
           title: 'Gelöscht!',
           text: scope === 'all' ? 'Das Rezept inklusive aller Varianten wurde gelöscht.' : 'Die Version wurde erfolgreich gelöscht.',
           icon: 'success',
-          background: '#1f1a14',
-          color: '#f5ede2',
           confirmButtonColor: '#ff7a3d'
         });
         window.location.href = redirectTo;
       } else {
-        await Swal.fire({
+        await swalFire({
           title: 'Fehler!',
           text: 'Beim Löschen ist ein Fehler aufgetreten.',
           icon: 'error',
-          background: '#1f1a14',
-          color: '#f5ede2',
-          confirmButtonColor: '#ff5c5c'
+          confirmButtonColor: 'var(--danger)'
         });
       }
     } catch {
-      await Swal.fire({
+      await swalFire({
         title: 'Fehler!',
         text: 'Beim Löschen ist ein Fehler aufgetreten.',
         icon: 'error',
-        background: '#1f1a14',
-        color: '#f5ede2',
-        confirmButtonColor: '#ff5c5c'
+        confirmButtonColor: 'var(--danger)'
       });
     }
   }
@@ -738,6 +721,9 @@
     padding: 12px 16px;
     border-top: 1px solid var(--border);
     background: var(--surface-2);
+    /* Karte clippt nicht mehr (Dropdowns) → der Footer rundet seine
+       eigenen unteren Ecken passend zum Karten-Radius ab (-1px Border). */
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
   }
 
   .card-actions .version-dropdown {

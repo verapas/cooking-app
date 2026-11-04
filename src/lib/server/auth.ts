@@ -20,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { env } from '$env/dynamic/private';
 import { pool, type ResultSetHeader, type RowDataPacket } from './db';
-import type { SessionUser, ActiveSpace, SpaceRole } from '$lib/types';
+import type { SessionUser, ActiveSpace } from '$lib/types';
 
 // --- Konfiguration ---
 const ISSUER = env.OIDC_ISSUER?.replace(/\/+$/, '') ?? null;
@@ -212,7 +212,7 @@ export async function getSession(token: string): Promise<SessionRecord | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT s.id_token, s.expires_at,
             u.id AS uid, u.username, u.email, u.name, u.is_admin,
-            sp.id AS space_id, sp.name AS space_name, sm.role AS space_role
+            sp.id AS space_id, sp.name AS space_name
      FROM sessions s
      JOIN users u ON u.id = s.user_id
      LEFT JOIN spaces sp ON sp.id = u.active_space_id
@@ -235,11 +235,10 @@ export async function getSession(token: string): Promise<SessionRecord | null> {
     idToken: (row.id_token as string | null) ?? null,
     needsRefresh: expiresAt - Date.now() < (SESSION_TTL_SEC * 1000) / 2,
     space:
-      row.space_id != null && row.space_role != null
+      row.space_id != null
         ? {
             id: Number(row.space_id),
-            name: row.space_name as string,
-            role: row.space_role as SpaceRole
+            name: row.space_name as string
           }
         : null
   };
