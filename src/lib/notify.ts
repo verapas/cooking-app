@@ -1,34 +1,8 @@
-// === Benachrichtigungen & nativer Android-Timer ===
-// Der In-App-Timer stirbt, wenn der Tab eingefroren wird. Daher zwei
-// Auswege: (a) auf Android den System-Timer der Uhr-App starten (klingelt
-// zuverlässig, auch bei gesperrtem Display — gestartete Timer werden
-// dabei NICHT als gespeicherte Timer angelegt, sie laufen einfach ab),
-// (b) Fallback: Web-Notification mit Signalton/Vibration, sobald der
-// Tick-Code wieder laufen darf.
-
-/** Läuft die App auf Android? (dort ist der Intent-Timer möglich) */
-export function isAndroid(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /android/i.test(navigator.userAgent);
-}
-
-/**
- * Intent-URI, die auf Android die Uhr-App einen Timer starten lässt.
- * SKIP_UI=1 → ohne Bestätigungsdialog, der Timer läuft sofort los.
- * LENGTH wird in Sekunden angegeben und auf >= 1 geklemmt.
- */
-export function androidTimerUrl(seconds: number, label: string): string {
-  const len = Math.max(1, Math.round(seconds));
-  return (
-    `intent:#Intent` +
-    `;action=android.intent.action.SET_TIMER` +
-    `;i.android.intent.extra.alarm.LENGTH=${len}` +
-    `;S.android.intent.extra.alarm.MESSAGE=${encodeURIComponent(label)}` +
-    `;i.android.intent.extra.alarm.SKIP_UI=1` +
-    `;package=com.google.android.deskclock` +
-    `;end`
-  );
-}
+// === Benachrichtigungen für den Schritt-Timer ===
+// Der In-App-Timer stirbt, wenn der Tab eingefroren wird. Wenn die Zeit
+// dann im Hintergrund abläuft (Android lässt gedrosselte Tabs ~1×/Minute
+// ticken, irgendwann läuft der Finish-Tick), holt eine Web-Notification
+// mit Signalton und Vibration den Nutzer zurück.
 
 /**
  * Notification-PPermission anfordern (aus einer Nutzer-Geste heraus).

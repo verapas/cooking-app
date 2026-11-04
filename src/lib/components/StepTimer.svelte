@@ -2,7 +2,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { playBeep, unlockAudio, vibrate } from '$lib/sound';
   import { releaseWakeLock, requestWakeLock } from '$lib/wakeLock';
-  import { androidTimerUrl, ensureNotificationPermission, isAndroid, notifyTimerDone } from '$lib/notify';
+  import { ensureNotificationPermission, notifyTimerDone } from '$lib/notify';
   import Icon from './Icon.svelte';
 
   let {
@@ -213,12 +213,6 @@
     persist();
   }
 
-  /** Restzeit an die Uhr-App übergeben → echter Wecker auf dem Handy. */
-  function startSystemTimer(): void {
-    pause();
-    location.href = androidTimerUrl(remaining, label ?? 'Kochen');
-  }
-
   onDestroy(() => {
     stopInterval();
     if (typeof document !== 'undefined') {
@@ -259,13 +253,6 @@
       {/if}
     {/if}
   </div>
-
-  {#if !finished && isAndroid()}
-    <button class="systimer" onclick={startSystemTimer}>
-      🔔 Auf dem Handy klingeln lassen
-    </button>
-    <p class="hint">Startet einen Timer in der Uhr-App — klingelt und vibriert zuverlässig, auch wenn die App geschlossen ist.</p>
-  {/if}
 
   {#if !finished}
     <div class="adjust">
@@ -339,28 +326,6 @@
   .bigbtn {
     padding-left: 24px;
     padding-right: 24px;
-  }
-  .systimer {
-    padding: 8px 16px;
-    border-radius: 999px;
-    border: 1px solid var(--accent);
-    background: transparent;
-    color: var(--accent);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .systimer:hover {
-    background: var(--accent);
-    color: var(--surface);
-  }
-  .hint {
-    margin: 0;
-    font-size: 0.72rem;
-    color: var(--text-dim);
-    text-align: center;
-    max-width: 260px;
   }
   .adjust {
     display: flex;
